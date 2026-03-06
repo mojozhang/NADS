@@ -15,6 +15,7 @@ export async function GET() {
                 name: true,
                 contractNumber: true,
                 contractSignDate: true,
+                amount: true,
                 devices: {
                     select: {
                         id: true,

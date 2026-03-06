@@ -32,6 +32,9 @@ export default function ContractsPage() {
     const [selectedProjectId, setSelectedProjectId] = useState("")
     const [paymentSearchTerm, setPaymentSearchTerm] = useState("")
     const [paymentNote, setPaymentNote] = useState("")
+    const [paymentInputMode, setPaymentInputMode] = useState<"amount" | "percentage">("amount")
+    const [paymentPercentage, setPaymentPercentage] = useState("")
+    const [selectedProjectAmount, setSelectedProjectAmount] = useState<number | null>(null)
 
     // 批处理状态
     const [uploadQueue, setUploadQueue] = useState<{
@@ -442,6 +445,7 @@ export default function ContractsPage() {
                                                                 className="group flex flex-col p-3 hover:bg-blue-50 cursor-pointer text-sm border-b last:border-0 transition-all duration-200 border-l-2 border-l-transparent hover:border-l-blue-500"
                                                                 onClick={() => {
                                                                     setSelectedProjectId(p.id)
+                                                                    setSelectedProjectAmount(p.amount)
                                                                     setPaymentSearchTerm(`${p.name} (${p.contractNumber || '无合同号'})`)
                                                                 }}
                                                             >
@@ -491,17 +495,71 @@ export default function ContractsPage() {
                                         )}
                                     </div>
                                     <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <Label>货款金额</Label>
-                                            <Input
-                                                type="number"
-                                                placeholder="输入金额"
-                                                value={paymentAmount}
-                                                onChange={(e) => setPaymentAmount(e.target.value)}
-                                            />
+                                        <div className="flex flex-col space-y-2">
+                                            <div className="flex items-center justify-between h-8">
+                                                <Label>货款录入方式</Label>
+                                                <div className="flex items-center space-x-1 bg-gray-100 p-0.5 rounded text-xs">
+                                                    <button
+                                                        onClick={() => setPaymentInputMode('amount')}
+                                                        className={`px-2 py-1 rounded-sm transition-colors ${paymentInputMode === 'amount' ? 'bg-white text-blue-700 shadow-sm font-bold' : 'text-gray-500 hover:text-gray-900'}`}
+                                                    >
+                                                        固定金额
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (selectedProjectAmount) {
+                                                                setPaymentInputMode('percentage')
+                                                            }
+                                                        }}
+                                                        disabled={!selectedProjectAmount}
+                                                        className={`px-2 py-1 rounded-sm transition-colors ${!selectedProjectAmount ? 'opacity-50 cursor-not-allowed' : paymentInputMode === 'percentage' ? 'bg-white text-blue-700 shadow-sm font-bold' : 'text-gray-500 hover:text-gray-900'}`}
+                                                        title={!selectedProjectAmount ? "该项目暂无合同总额记录，无法按百分比计算" : ""}
+                                                    >
+                                                        按百分比
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {paymentInputMode === 'amount' ? (
+                                                <Input
+                                                    type="number"
+                                                    placeholder="输入金额 (元)"
+                                                    value={paymentAmount}
+                                                    onChange={(e) => setPaymentAmount(e.target.value)}
+                                                />
+                                            ) : (
+                                                <div className="space-y-1">
+                                                    <div className="relative">
+                                                        <Input
+                                                            type="number"
+                                                            placeholder="输入比例 (如 30，代表 30%)"
+                                                            value={paymentPercentage}
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                setPaymentPercentage(val);
+                                                                if (val && selectedProjectAmount) {
+                                                                    const calculated = (selectedProjectAmount * parseFloat(val) / 100).toFixed(2);
+                                                                    setPaymentAmount(calculated);
+                                                                } else {
+                                                                    setPaymentAmount("");
+                                                                }
+                                                            }}
+                                                            className="pr-8"
+                                                        />
+                                                        <span className="absolute right-3 top-2.5 text-gray-500">%</span>
+                                                    </div>
+                                                    {paymentPercentage && selectedProjectAmount && (
+                                                        <div className="text-xs text-blue-600 px-1 font-medium">
+                                                            折算金额: ¥{paymentAmount}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
-                                        <div className="space-y-2">
-                                            <Label>款项日期</Label>
+                                        <div className="flex flex-col space-y-2">
+                                            <div className="flex items-center h-8">
+                                                <Label>款项日期</Label>
+                                            </div>
                                             <Input
                                                 type="date"
                                                 value={paymentDate}
