@@ -1,0 +1,220 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          String    @default("user")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now())
+  accounts      Account[]
+  sessions      Session[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Client {
+  id        String    @id @default(cuid())
+  name      String
+  contact   String?
+  phone     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  projects  Project[]
+}
+
+model Project {
+  id                    String    @id @default(cuid())
+  clientId              String
+  name                  String
+  amount                Float?
+  deliveryRaw           String?
+  deliveryType          String    @default("natural")
+  deliveryDays          Int?
+  deliveryTrigger       String    @default("contract")
+  delivery              DateTime?
+  isDeliveryManual      Boolean   @default(false)
+  manualDeliveryDays    Int?
+  manualDeliveryType    String?
+  manualDeliveryTrigger String?
+  paymentTerm           String?
+  downPayment           Float?
+  downPaymentAckDate    DateTime?
+  status                String    @default("pending")
+  designDaysPreset      Int       @default(3)
+  purchaseDaysPreset    Int       @default(2)
+  debugDaysPreset       Int       @default(4)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  contractNumber        String?   @unique
+  contractSignDate      DateTime?
+  contract              Contract?
+  devices               Device[]
+  issues                Issue[]
+  invoices              Invoice[]
+  client                Client    @relation(fields: [clientId], references: [id])
+}
+
+model Device {
+  id                String    @id @default(cuid())
+  projectId         String
+  category          String
+  quantity          Int       @default(1)
+  price             Float?
+  techSpecs         String?
+  designEst         DateTime?
+  mfgEst            DateTime? // 兼容旧系统的物料总节点（EST展示）
+  standardPartEst   DateTime?
+  customPartEst     DateTime?
+  outsourcedPartEst DateTime?
+  electricalPartEst DateTime?
+  assemblyEst       DateTime?
+  debugEst          DateTime?
+  designAck         DateTime?
+  isDesignManual    Boolean   @default(false)
+  isMfgManual       Boolean   @default(false)
+  isStandardManual  Boolean   @default(false)
+  isCustomManual    Boolean   @default(false)
+  isOutsourcedManual Boolean   @default(false)
+  isElectricalManual Boolean   @default(false)
+  isAssemblyManual  Boolean   @default(false)
+  isDebugManual     Boolean   @default(false)
+  isShipmentManual  Boolean   @default(false)
+  standardPartAck   DateTime?
+  customPartAck     DateTime?
+  outsourcedPartAck DateTime?
+  electricalPartAck DateTime?
+  assemblyAck       DateTime?
+  debugAck          DateTime?
+  shipmentAck       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  project           Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parts             Part[]
+}
+
+model Part {
+  id              String    @id @default(cuid())
+  deviceId        String?
+  name            String
+  type            String
+  quantity        Int       @default(1)
+  partNumber      String?
+  material        String?
+  spec            String?
+  supplier        String?
+  unitPrice       Float?
+  estCost         Float?
+  actualCost      Float?
+  issueDate       DateTime?
+  arrivalDate     DateTime?
+  isStocked       Boolean   @default(false)
+  invoiceInfo     String?
+  remark          String?
+  estDate         DateTime?
+  status          String    @default("pending")
+  supplierUrl     String?
+  expressCompany  String?
+  trackingNumber  String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  estLaborCost    Float?
+  estMaterialCost Float?
+  estProcessInfo  String?
+  device          Device?   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+}
+
+model Issue {
+  id          String   @id @default(cuid())
+  projectId   String
+  title       String
+  description String
+  kbSummary   String?
+  status      String   @default("open")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Contract {
+  id             String    @id @default(cuid())
+  projectId      String?   @unique
+  seq            Int       @default(0)
+  acceptanceDate DateTime?
+  invoicedAmount Float     @default(0)
+  completed      Boolean   @default(false)
+  paymentRemark  String?
+  payTime2       String?
+  payAmount2     Float     @default(0)
+  payTime3       String?
+  payAmount3     Float     @default(0)
+  payTime4       String?
+  payAmount4     Float     @default(0)
+  paymentNote    String?
+  remark1        String?
+  remark2        String?
+  remark3        String?
+  remark4        String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  project        Project?  @relation(fields: [projectId], references: [id])
+  invoices       Invoice[]
+}
+
+model Invoice {
+  id            String    @id @default(cuid())
+  invoiceNumber String?
+  amount        Float
+  date          DateTime?
+  buyerName     String?
+  projectId     String?
+  contractId    String?
+  status        String    @default("pending") // pending, matched, manual
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  project       Project?  @relation(fields: [projectId], references: [id])
+  contract      Contract? @relation(fields: [contractId], references: [id])
+}
