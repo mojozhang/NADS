@@ -77,8 +77,39 @@ export async function createDevice(data: {
     price?: number
 }) {
     try {
+        const project = await prisma.project.findUnique({
+            where: { id: data.projectId },
+            select: { contractNumber: true }
+        })
+
+        const contractNum = project?.contractNumber || 'VAR'
+
+        // 获取当前项目下最大的流水号
+        const existingDevices = await prisma.device.findMany({
+            where: { projectId: data.projectId, deviceNumber: { startsWith: `${contractNum}-` } },
+            select: { deviceNumber: true }
+        })
+
+        let maxSeq = 0
+        for (const d of existingDevices) {
+            if (d.deviceNumber) {
+                const parts = d.deviceNumber.split('-')
+                if (parts.length > 1) {
+                    const seq = parseInt(parts[parts.length - 1], 10)
+                    if (!isNaN(seq) && seq > maxSeq) {
+                        maxSeq = seq
+                    }
+                }
+            }
+        }
+
+        const deviceNumber = `${contractNum}-${String(maxSeq + 1).padStart(2, '0')}`
+
         const device = await prisma.device.create({
-            data,
+            data: {
+                ...data,
+                deviceNumber
+            },
         })
         revalidatePath(`/dashboard/projects/${data.projectId}`)
         return { success: true, data: device }

@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import { getDashboardProjects, updateProjectDelivery, toggleMilestone, archiveProject, unarchiveProject, updateProjectName, deleteProject } from "@/app/actions/overview"
 import { format, differenceInDays } from "date-fns"
-import { Loader2, CalendarClock, Briefcase, AlertTriangle, CheckCircle2, Search, Edit3, DollarSign, Calendar, Clock, Package, Check, Settings, Archive, XCircle, ShoppingCart, RotateCcw, Trash2 } from "lucide-react"
+import { Loader2, CalendarClock, Briefcase, AlertTriangle, CheckCircle2, Search, Edit3, DollarSign, Calendar, Clock, Package, Check, Settings, Archive, XCircle, ShoppingCart, RotateCcw, Trash2, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -456,6 +456,40 @@ export default function DashboardIndexPage() {
                                             </button>
                                             {isOverdue && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-600 uppercase tracking-wider animate-pulse">超期警告</span>}
                                             {isUrgent && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-600 uppercase tracking-wider">紧急交付</span>}
+                                            {/* 下载发货单链接（项目级别，只包含已发货设备） */}
+                                            {(() => {
+                                                const hasShipped = project.devices?.some((d: any) => !!d.shipmentAck);
+
+                                                if (hasShipped) {
+                                                    return (
+                                                        <a
+                                                            href={`/api/project/${project.id}/shipment-doc`}
+                                                            download={`发货单_${project.contractNumber || project.name || '未命名'}.docx`}
+                                                            className="flex items-center gap-1 px-2 py-1 hover:bg-blue-50 rounded-lg text-gray-400 hover:text-blue-600 transition-all text-[10px] font-bold"
+                                                            title="下载发货单（包含所有已打色的发货设备）"
+                                                        >
+                                                            <Download className="w-3.5 h-3.5" />
+                                                            发货单
+                                                        </a>
+                                                    );
+                                                } else {
+                                                    return (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                alert('没有已发货的设备，无法生成发货单。请先点击发货圆点。');
+                                                            }}
+                                                            className="flex items-center gap-1 px-2 py-1 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-400 transition-all text-[10px] font-bold"
+                                                            title="无法下载：项目中暂无已确认发货的设备"
+                                                        >
+                                                            <Download className="w-3.5 h-3.5" />
+                                                            发货单
+                                                        </button>
+                                                    );
+                                                }
+                                            })()}
                                         </div>
 
                                         <div className="flex items-center gap-4 text-sm text-gray-500">
@@ -662,7 +696,7 @@ export default function DashboardIndexPage() {
                                                             const displayDate = deviceShipDate || (project.delivery ? new Date(project.delivery) : null)
                                                             const overdue = !device.shipmentAck && project.delivery && new Date(project.delivery) < now
                                                             return (
-                                                                <div className="w-[15%]">
+                                                                <div className="w-[15%] relative group/shipment">
                                                                     <div className="flex flex-col items-center gap-1.5">
                                                                         <div
                                                                             className={`cursor-pointer w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all ${device.shipmentAck ? 'bg-green-500 border-green-500 shadow-md scale-110' : overdue ? 'border-red-400 bg-red-50' : 'border-teal-400 hover:border-teal-600 bg-white'}`}
@@ -672,6 +706,8 @@ export default function DashboardIndexPage() {
                                                                         </div>
                                                                         <span className={device.shipmentAck ? 'text-green-700' : overdue ? 'text-red-500 animate-pulse' : 'text-teal-700'}>发货</span>
                                                                         <div className="text-[8px] text-gray-400 scale-90">{displayDate ? format(displayDate, 'MM/dd') : '-'}</div>
+
+
                                                                     </div>
                                                                 </div>
                                                             )

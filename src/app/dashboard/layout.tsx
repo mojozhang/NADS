@@ -59,7 +59,7 @@ export default async function DashboardLayout({
             <main className="flex-1 flex flex-col h-screen overflow-hidden">
                 <header className="flex h-16 items-center justify-between border-b border-gray-100 bg-white px-8 shrink-0">
                     <h2 className="text-xl font-bold text-gray-800">
-                        NADS <span className="text-lg font-normal text-gray-500">V0.8 Preview</span>
+                        NADS <span className="text-lg font-normal text-gray-500">V0.9.7</span>
                     </h2>
                     <div className="flex items-center space-x-4">
                         <span className="text-sm text-gray-500">{session.user.email}</span>

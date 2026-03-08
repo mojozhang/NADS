@@ -299,10 +299,12 @@ export async function POST(req: NextRequest) {
         })
 
         if (parsedData.devices && Array.isArray(parsedData.devices)) {
+            let deviceSeq = 1
             for (const d of parsedData.devices) {
                 await prisma.device.create({
                     data: {
                         projectId: project.id,
+                        deviceNumber: `${contractNumber}-${String(deviceSeq++).padStart(2, '0')}`,
                         category: d.category || "未命名设备",
                         quantity: d.quantity || 1,
                         price: d.price || null,

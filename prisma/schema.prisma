@@ -99,6 +99,7 @@ model Project {
 
 model Device {
   id                String    @id @default(cuid())
+  deviceNumber      String?   @unique
   projectId         String
   category          String
   quantity          Int       @default(1)
