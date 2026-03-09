@@ -59,8 +59,27 @@ export async function getRecentProjects() {
                 type: "payment"
             }))
 
+        // 4. 获取最近的发货单上传记录
+        // 通过筛选已上传发货单的项目并按更新时间排序
+        const shipmentProjects = await prisma.project.findMany({
+            where: {
+                shipmentDocUrl: { not: null }
+            },
+            orderBy: { updatedAt: "desc" },
+            take: 5,
+            include: { client: true }
+        })
+        const shipmentHistory = shipmentProjects.map(p => ({
+            id: `shipment-${p.id}`,
+            name: `发货单上传 - ${p.name}${p.contractNumber ? ` (${p.contractNumber})` : ''}`,
+            client: p.client,
+            createdAt: p.updatedAt,
+            type: "shipment",
+            fileUrl: p.shipmentDocUrl
+        }))
+
         // 合并并重新按时间排序
-        const combined = [...projectHistory, ...invoiceHistory, ...paymentHistory]
+        const combined = [...projectHistory, ...invoiceHistory, ...paymentHistory, ...shipmentHistory]
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
             .slice(0, 10)
 

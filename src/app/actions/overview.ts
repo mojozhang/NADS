@@ -123,6 +123,42 @@ const calculateEstimationsV2 = (
     }
 }
 
+/**
+ * 获取项目概览详情（包含设备、物料组汇总等）
+ */
+export async function getProjectOverview(projectId: string) {
+    try {
+        const session = await getServerSession(authOptions)
+        if (!session?.user) return { error: "Unauthorized" }
+
+        const project = await prisma.project.findUnique({
+            where: { id: projectId },
+            include: {
+                client: true,
+                devices: {
+                    include: {
+                        parts: {
+                            orderBy: { createdAt: 'asc' }
+                        }
+                    }
+                },
+                contract: {
+                    include: {
+                        invoices: true
+                    }
+                },
+                invoices: true
+            }
+        })
+
+        if (!project) return { error: "Project not found" }
+
+        return { success: true, data: project }
+    } catch (error: any) {
+        return { error: error.message }
+    }
+}
+
 export async function getDashboardProjects() {
     try {
         const session = await getServerSession(authOptions)

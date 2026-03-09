@@ -421,10 +421,11 @@ export default function DashboardIndexPage() {
                         const daysLeft = project.delivery ? Math.ceil((new Date(project.delivery).getTime() - now.getTime()) / (1000 * 3600 * 24)) : null
                         const isUrgent = daysLeft !== null && daysLeft <= 7 && daysLeft >= 0
                         const isOverdue = daysLeft !== null && daysLeft < 0
+                        const isShipped = project.devices?.every((d: any) => d.shipmentAck)
                         const isWaitingPayment = !project.downPaymentAckDate
 
                         return (
-                            <div key={project.id} className={`group relative bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-xl transition-all duration-300 ${isOverdue ? 'border-red-100 bg-red-50/5' : isUrgent ? 'border-amber-100 bg-amber-50/5' : ''}`}>
+                            <div key={project.id} className={`group relative bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-xl transition-all duration-300 ${(isOverdue && !isShipped) ? 'border-red-100 bg-red-50/5' : (isUrgent && !isShipped) ? 'border-amber-100 bg-amber-50/5' : ''}`}>
                                 {/* 顶部信息栏 */}
                                 <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
                                     <div className="min-w-0 flex-1">
@@ -446,6 +447,13 @@ export default function DashboardIndexPage() {
                                                     {project.contractNumber}
                                                 </span>
                                             )}
+                                            <Link
+                                                href={`/dashboard/project/${project.id}/overview`}
+                                                className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all text-[10px] font-bold shadow-sm"
+                                            >
+                                                <Briefcase className="w-3.5 h-3.5" />
+                                                项目概览
+                                            </Link>
                                             {/* 移除此处的全局采购入口 */}
                                             <button
                                                 onClick={() => { setProjectDeleteConfirm({ open: true, id: project.id, name: project.name }); setProjectDeleteInput('') }}
@@ -454,8 +462,9 @@ export default function DashboardIndexPage() {
                                             >
                                                 <Trash2 className="w-4 h-4" />
                                             </button>
-                                            {isOverdue && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-600 uppercase tracking-wider animate-pulse">超期警告</span>}
-                                            {isUrgent && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-600 uppercase tracking-wider">紧急交付</span>}
+                                            {isOverdue && !isShipped && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-600 uppercase tracking-wider animate-pulse">超期警告</span>}
+                                            {isUrgent && !isShipped && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-600 uppercase tracking-wider">紧急交付</span>}
+                                            {isShipped && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-600 uppercase tracking-wider">已发货</span>}
                                             {/* 下载发货单链接（项目级别，只包含已发货设备） */}
                                             {(() => {
                                                 const hasShipped = project.devices?.some((d: any) => !!d.shipmentAck);
@@ -504,10 +513,18 @@ export default function DashboardIndexPage() {
                                     </div>
 
                                     <div className="text-right">
-                                        <div className={`text-2xl font-black mb-1 ${isOverdue ? 'text-red-500' : isUrgent ? 'text-amber-500' : 'text-blue-500'}`}>
-                                            {isOverdue ? Math.abs(daysLeft!) : daysLeft ?? '-'}
-                                            <span className="text-xs font-bold ml-1">{isOverdue ? '天前交货' : '天后交货'}</span>
-                                        </div>
+                                        {project.devices?.every((d: any) => d.shipmentAck) ? (
+                                            <div className="text-2xl font-black mb-1 text-green-600">
+                                                已发货
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <div className={`text-2xl font-black mb-1 ${isOverdue ? 'text-red-500' : isUrgent ? 'text-amber-500' : 'text-blue-500'}`}>
+                                                    {isOverdue ? Math.abs(daysLeft!) : daysLeft ?? '-'}
+                                                    <span className="text-xs font-bold ml-1">{isOverdue ? '天前已超期' : '天后交货'}</span>
+                                                </div>
+                                            </>
+                                        )}
                                         <div className="text-[11px] font-bold text-gray-400 flex items-center justify-end gap-1.5 uppercase tracking-tighter">
                                             <Calendar className="w-3.5 h-3.5" />
                                             最晚交货期: {project.delivery ? format(new Date(project.delivery), 'yyyy/MM/dd') : '未设定'}

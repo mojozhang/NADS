@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { UploadCloud, FileText, CheckCircle2, Loader2, AlertCircle, Clock, Check } from "lucide-react"
+import { UploadCloud, FileText, CheckCircle2, Loader2, AlertCircle, Clock, Check, Search, Package, ZoomIn, X } from "lucide-react"
+
+
 import { getRecentProjects, addPaymentRecord } from "@/app/actions/history"
 import { format } from "date-fns"
 import * as pdfjs from 'pdfjs-dist'
@@ -26,7 +28,7 @@ export default function ContractsPage() {
     const [previews, setPreviews] = useState<{ page: number, url: string }[]>([])
     const [selectedPages, setSelectedPages] = useState<number[]>([1]) // 默认选第一页
     const [isGeneratingPreviews, setIsGeneratingPreviews] = useState(false)
-    const [uploadMode, setUploadMode] = useState<"contract" | "invoice" | "payment">("contract")
+    const [uploadMode, setUploadMode] = useState<"contract" | "invoice" | "payment" | "shipment">("contract")
     const [paymentAmount, setPaymentAmount] = useState("")
     const [paymentDate, setPaymentDate] = useState(format(new Date(), 'yyyy-MM-dd'))
     const [selectedProjectId, setSelectedProjectId] = useState("")
@@ -156,16 +158,21 @@ export default function ContractsPage() {
                 formData.append("selectedPages", JSON.stringify(selectedPages))
             }
 
-            const response = await fetch(uploadMode === 'contract' ? "/api/parse-contract" : "/api/parse-invoice", {
-                method: "POST",
-                body: formData
-            })
+            const response = await fetch(
+                uploadMode === 'contract' ? "/api/parse-contract" :
+                    uploadMode === 'invoice' ? "/api/parse-invoice" :
+                        "/api/parse-shipment",
+                {
+                    method: "POST",
+                    body: formData
+                }
+            )
 
             const resData = await response.json()
 
             if (!response.ok) throw new Error(resData.error || "解析失败")
 
-            if (uploadMode === 'invoice' && resData.collision) {
+            if ((uploadMode === 'invoice' || uploadMode === 'shipment') && resData.collision) {
                 setUploadQueue(prev => prev.map(item =>
                     item.id === queueId ? { ...item, status: "collision", result: resData } : item
                 ))
@@ -180,19 +187,19 @@ export default function ContractsPage() {
                         queueId: queueId
                     }
                 })
-                return "collision"
+                return { status: "collision", data: resData }
             }
 
             setUploadQueue(prev => prev.map(item =>
                 item.id === queueId ? { ...item, status: "success" } : item
             ))
-            return "success"
+            return { status: "success" }
         } catch (error) {
             const msg = error instanceof Error ? error.message : "未知错误"
             setUploadQueue(prev => prev.map(item =>
                 item.id === queueId ? { ...item, status: "error", error: msg } : item
             ))
-            return "error"
+            return { status: "error", message: msg }
         }
     }
 
@@ -204,14 +211,14 @@ export default function ContractsPage() {
         if (uploadMode === 'contract') {
             const qId = uploadQueue[0]?.id || "default"
             const result = await processSingleFile(files[0], qId)
-            if (result === 'success') {
+            if (result.status === 'success') {
                 setUploadStatus("success")
                 setFiles([])
                 setUploadQueue([])
                 fetchHistory()
-            } else if (result === 'error') {
+            } else if (result.status === 'error') {
                 setUploadStatus("error")
-                setErrorMessage(uploadQueue.find(i => i.id === qId)?.error || "上传失败")
+                setErrorMessage(result.message || "上传失败")
             }
             setIsUploading(false)
         } else {
@@ -225,10 +232,9 @@ export default function ContractsPage() {
                 const result = await processSingleFile(file, item.id)
 
                 // 如果出现错误（如类型不匹配），则按照用户要求“停止工作”
-                if (result === 'error') {
+                if (result.status === 'error') {
                     setUploadStatus("error")
-                    const errorMsg = uploadQueue.find(q => q.id === item.id)?.error || "处理中断"
-                    setErrorMessage(errorMsg)
+                    setErrorMessage(result.message || "处理中断")
                     break
                 }
             }
@@ -322,12 +328,13 @@ export default function ContractsPage() {
     const handleManualLink = async (projectId: string) => {
         setIsLinking(true)
         try {
-            const res = await fetch("/api/link-invoice", {
+            const res = await fetch(collisionData.parsed && collisionData.parsed.type === 'shipment' ? "/api/link-shipment" : "/api/link-invoice", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     projectId,
-                    parsed: collisionData.parsed
+                    parsed: collisionData.parsed,
+                    fileUrl: collisionData.parsed?.fileUrl // 对于发货单关联，需要传递已上传的文件URL
                 })
             })
             if (!res.ok) throw new Error("关联失败")
@@ -393,6 +400,12 @@ export default function ContractsPage() {
                         >
                             货款录入
                         </button>
+                        <button
+                            onClick={() => { setUploadMode("shipment"); setUploadStatus("idle"); }}
+                            className={`px-4 py-1.5 text-sm rounded-md transition-all ${uploadMode === 'shipment' ? 'bg-white shadow text-indigo-600 font-bold' : 'text-gray-500'}`}
+                        >
+                            发货单上传
+                        </button>
                     </div>
                 </div>
 
@@ -400,14 +413,16 @@ export default function ContractsPage() {
                     <Card className="col-span-3">
                         <CardHeader>
                             <CardTitle>
-                                {uploadMode === 'contract' ? '信息智能识别' : uploadMode === 'invoice' ? '发票对账识别' : '货款记录录入'}
+                                {uploadMode === 'contract' ? '信息智能识别' : uploadMode === 'invoice' ? '发票对账识别' : uploadMode === 'shipment' ? '发货单识别上传' : '货款记录录入'}
                             </CardTitle>
                             <CardDescription>
                                 {uploadMode === 'contract'
                                     ? '支持 PDF 合同、协议或图片。AI 将自动识别项目及设备技术参数。'
                                     : uploadMode === 'invoice'
                                         ? '识别发票并将金额自动录入对应合同。支持购方模糊匹配与冲突提醒。'
-                                        : '手动录入收到的货款金额，将自动关联至合同管理中的付款记录。'
+                                        : uploadMode === 'shipment'
+                                            ? '上传发货单或送货单。系统将自动提取合同号并更新项目发货状态。'
+                                            : '手动录入收到的货款金额，将自动关联至合同管理中的付款记录。'
                                 }
                             </CardDescription>
                         </CardHeader>
@@ -643,7 +658,23 @@ export default function ContractsPage() {
                                                         {item.status === 'processing' && <Loader2 className="w-3 h-3 animate-spin text-blue-500" />}
                                                         {item.status === 'success' && <CheckCircle2 className="w-3 h-3 text-green-500" />}
                                                         {item.status === 'error' && <AlertCircle className="w-3 h-3 text-red-500" />}
-                                                        {item.status === 'collision' && <AlertCircle className="w-3 h-3 text-orange-500" />}
+                                                        {item.status === 'collision' && (
+                                                            <div className="flex items-center gap-2">
+                                                                <AlertCircle className="w-3 h-3 text-orange-500" />
+                                                                <button
+                                                                    onClick={() => setCollisionData({
+                                                                        show: true,
+                                                                        reason: item.result?.reason || "未找到匹配项目",
+                                                                        parsed: item.result?.parsed,
+                                                                        candidates: item.result?.candidates || [],
+                                                                        queueId: item.id
+                                                                    })}
+                                                                    className="text-[10px] font-bold text-blue-600 hover:underline border border-blue-200 bg-blue-50 px-1.5 py-0.5 rounded"
+                                                                >
+                                                                    手动关联
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                         {item.status === 'waiting' && !isUploading && (
                                                             <button
                                                                 onClick={(e) => { e.preventDefault(); removeFile(item.id); }}
@@ -678,7 +709,7 @@ export default function ContractsPage() {
                                         ) : uploadStatus === "success" ? (
                                             "继续上传下一份"
                                         ) : (
-                                            `开始解析${uploadMode === 'contract' ? '合同' : '批次发票'}`
+                                            `开始解析${uploadMode === 'contract' ? '合同' : uploadMode === 'invoice' ? '批次发票' : '发货单'}`
                                         )}
                                     </Button>
 
@@ -748,6 +779,7 @@ export default function ContractsPage() {
                                                     {item.type === 'contract' && <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold">信息上传</span>}
                                                     {item.type === 'invoice' && <span className="px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 text-[10px] font-bold">发票</span>}
                                                     {item.type === 'payment' && <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-700 text-[10px] font-bold">货款</span>}
+                                                    {item.type === 'shipment' && <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 text-[10px] font-bold">发货单</span>}
                                                 </div>
                                                 <span className="text-xs text-gray-400 flex items-center">
                                                     <Clock className="w-3 h-3 mr-1" />
@@ -775,6 +807,16 @@ export default function ContractsPage() {
                                                     金额: ¥{item.amount.toLocaleString()}
                                                 </p>
                                             )}
+                                            {item.type === 'shipment' && item.fileUrl && (
+                                                <a
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    href={item.fileUrl}
+                                                    className="inline-flex items-center mt-2 text-[10px] text-indigo-600 hover:underline font-bold"
+                                                >
+                                                    <FileText className="w-3 h-3 mr-1" /> 查看发货单
+                                                </a>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
@@ -786,93 +828,191 @@ export default function ContractsPage() {
 
             {/* 发票冲突选择弹窗 */}
             <Dialog open={collisionData.show} onOpenChange={(open) => !isLinking && setCollisionData(prev => ({ ...prev, show: open }))}>
-                <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2">
-                            <AlertCircle className="w-5 h-5 text-orange-500" />
-                            无法自动关联项目
-                        </DialogTitle>
-                        <DialogDescription>
-                            发票识别成功，但{collisionData.reason}。请确认识别信息并手动搜索或选择归属项目。
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="py-2 border-y bg-gray-50/50 -mx-6 px-6">
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                            <span className="text-gray-500">识别购方：</span>
-                            <span className="font-medium truncate" title={collisionData.parsed?.buyerName}>{collisionData.parsed?.buyerName}</span>
-                            <span className="text-gray-500">发票金额：</span>
-                            <span className="text-blue-600 font-bold">¥{collisionData.parsed?.amount?.toLocaleString()}</span>
-                            <span className="text-gray-500">发票号码：</span>
-                            <span>{collisionData.parsed?.invoiceNumber}</span>
-                        </div>
-                    </div>
-
-                    <div className="pt-3 pb-2">
-                        <div className="relative">
-                            <Input
-                                placeholder="搜索项目名称或合同号..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="pl-8 text-xs h-8"
-                            />
-                            <UploadCloud className="w-3 h-3 absolute left-2.5 top-2.5 text-gray-400 rotate-180" />
-                        </div>
-                    </div>
-
-                    <div className="max-h-[250px] overflow-y-auto pr-1">
-                        {searchTerm.length > 0 ? (
-                            <div className="space-y-2">
-                                <Label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">搜索结果</Label>
-                                {allProjects
-                                    .filter(p =>
-                                        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                        (p.contractNumber && p.contractNumber.toLowerCase().includes(searchTerm.toLowerCase()))
-                                    )
-                                    .slice(0, 5)
-                                    .map(project => (
-                                        <button
-                                            key={project.id}
-                                            onClick={() => handleManualLink(project.id)}
-                                            disabled={isLinking}
-                                            className="w-full text-left p-2.5 rounded-lg border border-gray-100 hover:border-blue-500 hover:bg-blue-50/30 transition-all flex justify-between items-center group"
+                <DialogContent className="sm:max-w-[800px] gap-0 p-0 overflow-hidden border-none shadow-2xl">
+                    <div className="flex h-[600px]">
+                        {/* 左侧：单据预览 */}
+                        <div className="w-1/2 bg-gray-900 flex flex-col items-center justify-center p-4 relative overflow-hidden group">
+                            <div className="absolute top-4 left-4 z-10 px-2 py-1 bg-black/50 text-[10px] text-white rounded backdrop-blur-sm border border-white/20 font-bold tracking-widest uppercase">
+                                Document Preview
+                            </div>
+                            {collisionData.parsed?.fileUrl ? (
+                                collisionData.parsed.fileUrl.toLowerCase().endsWith('.pdf') ? (
+                                    <iframe
+                                        src={`${collisionData.parsed.fileUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                                        className="w-full h-full rounded-lg shadow-2xl bg-white"
+                                        title="PDF Preview"
+                                    />
+                                ) : (
+                                    <div className="relative w-full h-full flex items-center justify-center p-2">
+                                        <img
+                                            src={collisionData.parsed.fileUrl}
+                                            alt="Preview"
+                                            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                                        />
+                                        <a
+                                            href={collisionData.parsed.fileUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="absolute bottom-4 right-4 p-2.5 bg-white/90 hover:bg-white text-gray-900 rounded-full shadow-lg border border-gray-200 transition-all z-20"
+                                            title="在新窗口打开"
+                                            onClick={(e) => e.stopPropagation()}
                                         >
-                                            <div className="flex-1 truncate mr-2">
-                                                <div className="text-xs font-bold text-gray-900 truncate group-hover:text-blue-600">{project.name}</div>
-                                                <div className="text-[10px] text-gray-500">{project.contractNumber || '无合同号'}</div>
+                                            <UploadCloud className="w-4 h-4" />
+                                        </a>
+                                    </div>
+                                )
+                            ) : (
+                                <div className="text-gray-500 flex flex-col items-center gap-2">
+                                    <FileText className="w-12 h-12 opacity-20" />
+                                    <span className="text-xs">预览载入中...</span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 右侧：核对与搜索 */}
+                        <div className="w-1/2 bg-white flex flex-col h-full border-l border-gray-100">
+                            <div className="p-6 space-y-4 flex-1 overflow-y-auto">
+                                <DialogHeader>
+                                    <DialogTitle className="flex items-center gap-2 text-xl font-black">
+                                        <AlertCircle className="w-6 h-6 text-orange-500" />
+                                        无法自动关联项目
+                                    </DialogTitle>
+                                    <DialogDescription className="text-xs font-medium leading-relaxed">
+                                        识别成功，但{collisionData.reason}。请确认左侧单据内容并手动选择归属项目。
+                                    </DialogDescription>
+                                </DialogHeader>
+
+                                <div className="py-3 px-4 rounded-2xl bg-gray-50/80 border border-gray-100">
+                                    {collisionData.parsed?.type === 'shipment' ? (
+                                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                                            <div className="space-y-0.5">
+                                                <span className="text-gray-400 font-bold uppercase tracking-tighter block">识别合同号</span>
+                                                <span className="font-black text-indigo-600 text-sm">{collisionData.parsed?.contractNumber || '未识别'}</span>
                                             </div>
-                                            <div className="shrink-0 p-1 px-2 text-[10px] bg-gray-100 text-gray-500 group-hover:bg-blue-600 group-hover:text-white rounded">选择</div>
-                                        </button>
-                                    ))
-                                }
-                                {allProjects.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 && (
-                                    <div className="py-4 text-center text-xs text-gray-400">未找到相关项目</div>
-                                )}
-                            </div>
-                        ) : collisionData.candidates.length > 0 ? (
-                            <div className="space-y-2">
-                                <Label className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">推荐匹配项目</Label>
-                                {collisionData.candidates.map(candidate => (
-                                    <button
-                                        key={candidate.id}
-                                        onClick={() => handleManualLink(candidate.id)}
-                                        disabled={isLinking}
-                                        className="w-full text-left p-3 rounded-lg border border-gray-100 hover:border-blue-500 hover:bg-blue-50/30 transition-all flex justify-between items-center group"
-                                    >
-                                        <div className="flex-1">
-                                            <div className="text-xs font-bold text-gray-900 group-hover:text-blue-600">{candidate.name}</div>
-                                            <div className="text-[10px] text-gray-500 mt-0.5">{candidate.contractNumber}</div>
-                                            <div className="text-[10px] text-blue-500/70 mt-1 italic">{candidate.devices}</div>
+                                            <div className="space-y-0.5">
+                                                <span className="text-gray-400 font-bold uppercase tracking-tighter block">识别日期</span>
+                                                <span className="font-bold text-gray-900">{collisionData.parsed?.shipDate || '未识别'}</span>
+                                            </div>
+                                            <div className="col-span-2 space-y-0.5 mt-1 pt-1 border-t border-gray-100">
+                                                <span className="text-gray-400 font-bold uppercase tracking-tighter block">单据名称</span>
+                                                <span className="font-medium text-gray-600 truncate block">{collisionData.parsed?.fileName}</span>
+                                            </div>
                                         </div>
-                                        <div className="shrink-0 p-1 px-2 text-[10px] bg-gray-100 text-gray-500 group-hover:bg-blue-600 group-hover:text-white rounded">选择</div>
-                                    </button>
-                                ))}
+                                    ) : (
+                                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                                            <div className="col-span-2 space-y-0.5">
+                                                <span className="text-gray-400 font-bold uppercase tracking-tighter block">识别购方</span>
+                                                <span className="font-black text-blue-600 text-sm truncate block" title={collisionData.parsed?.buyerName}>{collisionData.parsed?.buyerName}</span>
+                                            </div>
+                                            <div className="space-y-0.5 mt-1 pt-1 border-t border-gray-100">
+                                                <span className="text-gray-400 font-bold uppercase tracking-tighter block">金额</span>
+                                                <span className="font-black text-gray-900">¥{collisionData.parsed?.amount?.toLocaleString()}</span>
+                                            </div>
+                                            <div className="space-y-0.5 mt-1 pt-1 border-t border-gray-100">
+                                                <span className="text-gray-400 font-bold uppercase tracking-tighter block">发票号码</span>
+                                                <span className="font-bold text-gray-900">{collisionData.parsed?.invoiceNumber}</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="space-y-3">
+                                    <Label className="text-[10px] text-gray-400 uppercase font-black tracking-widest">查找归属项目</Label>
+                                    <div className="relative">
+                                        <Input
+                                            placeholder="输入客户名称、项目名或合同号搜索..."
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            className="pl-9 h-11 rounded-xl border-gray-200 focus:ring-blue-500 text-sm shadow-sm"
+                                        />
+                                        <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-gray-400" />
+                                    </div>
+                                </div>
+
+                                <div className="flex-1 min-h-[150px]">
+                                    {searchTerm.length > 0 ? (
+                                        <div className="space-y-2">
+                                            {allProjects
+                                                .filter(p =>
+                                                    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                                    p.contractNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                                    p.client?.name.toLowerCase().includes(searchTerm.toLowerCase())
+                                                )
+                                                .slice(0, 5)
+                                                .map(p => (
+                                                    <div
+                                                        key={p.id}
+                                                        onClick={() => setSelectedProjectId(p.id)}
+                                                        className={`p-3 rounded-2xl border cursor-pointer transition-all duration-200 group ${selectedProjectId === p.id
+                                                            ? 'border-blue-500 bg-blue-50/50 ring-2 ring-blue-100'
+                                                            : 'border-gray-100 hover:border-gray-200 hover:bg-gray-50'
+                                                            }`}
+                                                    >
+                                                        <div className="flex justify-between items-start mb-1">
+                                                            <div className="flex-1 min-w-0">
+                                                                <h4 className="text-sm font-black text-gray-900 truncate">{p.name}</h4>
+                                                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">
+                                                                    {p.client?.name}
+                                                                </p>
+                                                            </div>
+                                                            {selectedProjectId === p.id && (
+                                                                <Check className="w-5 h-5 text-blue-500 animate-in zoom-in" />
+                                                            )}
+                                                        </div>
+                                                        <div className="flex items-center gap-3 mt-2 font-mono text-[9px] font-bold">
+                                                            <span className="flex items-center gap-1 text-gray-600 bg-white px-1.5 py-0.5 rounded border border-gray-100 shadow-sm">
+                                                                <Package className="w-3 h-3 text-gray-300" /> {p.contractNumber || '无合同号'}
+                                                            </span>
+                                                            <span className="flex items-center gap-1 text-blue-600 bg-white px-1.5 py-0.5 rounded border border-gray-100 shadow-sm">
+                                                                <Clock className="w-3 h-3 text-blue-300" /> {p.contractSignDate ? format(new Date(p.contractSignDate), 'yyyy/MM/dd') : '未签约'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            {allProjects.filter(p =>
+                                                p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                                p.contractNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                                p.client?.name.toLowerCase().includes(searchTerm.toLowerCase())
+                                            ).length === 0 && (
+                                                    <div className="text-center py-8 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                                                        <p className="text-xs text-gray-400 font-bold">未找到匹配项目</p>
+                                                    </div>
+                                                )}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-8 text-gray-400 text-xs font-medium space-y-2">
+                                            <UploadCloud className="w-8 h-8 mx-auto opacity-10 mb-2" />
+                                            <p>在上方搜索框输入关键信息进行匹配</p>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                        ) : (
-                            <div className="py-8 text-center text-xs text-gray-400">
-                                未通过购方名称自动找到匹配项目，请在上方搜索框输入项目关键字手动查找。
-                            </div>
-                        )}
+
+                            <DialogFooter className="p-4 bg-gray-50 border-t border-gray-100 sm:justify-end gap-2">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setCollisionData(prev => ({ ...prev, show: false }))}
+                                    className="rounded-xl border-gray-200 font-bold text-gray-600"
+                                    disabled={isLinking}
+                                >
+                                    取消
+                                </Button>
+                                <Button
+                                    onClick={() => handleManualLink(selectedProjectId)}
+                                    disabled={!selectedProjectId || isLinking}
+                                    className="rounded-xl bg-blue-600 hover:bg-blue-700 font-black shadow-lg shadow-blue-100 px-6"
+                                >
+                                    {isLinking ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            正在关联...
+                                        </>
+                                    ) : (
+                                        '确认关联此项目'
+                                    )}
+                                </Button>
+                            </DialogFooter>
+                        </div>
                     </div>
                 </DialogContent>
             </Dialog>

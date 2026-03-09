@@ -90,50 +90,52 @@ model Project {
   updatedAt             DateTime  @updatedAt
   contractNumber        String?   @unique
   contractSignDate      DateTime?
+  shipmentDocName       String?
+  shipmentDocUrl        String?
   contract              Contract?
   devices               Device[]
-  issues                Issue[]
   invoices              Invoice[]
+  issues                Issue[]
   client                Client    @relation(fields: [clientId], references: [id])
 }
 
 model Device {
-  id                String    @id @default(cuid())
-  deviceNumber      String?   @unique
-  projectId         String
-  category          String
-  quantity          Int       @default(1)
-  price             Float?
-  techSpecs         String?
-  designEst         DateTime?
-  mfgEst            DateTime? // 兼容旧系统的物料总节点（EST展示）
-  standardPartEst   DateTime?
-  customPartEst     DateTime?
-  outsourcedPartEst DateTime?
-  electricalPartEst DateTime?
-  assemblyEst       DateTime?
-  debugEst          DateTime?
-  designAck         DateTime?
-  isDesignManual    Boolean   @default(false)
-  isMfgManual       Boolean   @default(false)
-  isStandardManual  Boolean   @default(false)
-  isCustomManual    Boolean   @default(false)
+  id                 String    @id @default(cuid())
+  projectId          String
+  category           String
+  quantity           Int       @default(1)
+  price              Float?
+  techSpecs          String?
+  designEst          DateTime?
+  mfgEst             DateTime?
+  standardPartEst    DateTime?
+  customPartEst      DateTime?
+  outsourcedPartEst  DateTime?
+  electricalPartEst  DateTime?
+  assemblyEst        DateTime?
+  debugEst           DateTime?
+  designAck          DateTime?
+  isDesignManual     Boolean   @default(false)
+  isMfgManual        Boolean   @default(false)
+  isStandardManual   Boolean   @default(false)
+  isCustomManual     Boolean   @default(false)
   isOutsourcedManual Boolean   @default(false)
   isElectricalManual Boolean   @default(false)
-  isAssemblyManual  Boolean   @default(false)
-  isDebugManual     Boolean   @default(false)
-  isShipmentManual  Boolean   @default(false)
-  standardPartAck   DateTime?
-  customPartAck     DateTime?
-  outsourcedPartAck DateTime?
-  electricalPartAck DateTime?
-  assemblyAck       DateTime?
-  debugAck          DateTime?
-  shipmentAck       DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  project           Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  parts             Part[]
+  isAssemblyManual   Boolean   @default(false)
+  isDebugManual      Boolean   @default(false)
+  isShipmentManual   Boolean   @default(false)
+  standardPartAck    DateTime?
+  customPartAck      DateTime?
+  outsourcedPartAck  DateTime?
+  electricalPartAck  DateTime?
+  assemblyAck        DateTime?
+  debugAck           DateTime?
+  shipmentAck        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deviceNumber       String?   @unique
+  project            Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parts              Part[]
 }
 
 model Part {
@@ -212,10 +214,9 @@ model Invoice {
   buyerName     String?
   projectId     String?
   contractId    String?
-  status        String    @default("pending") // pending, matched, manual
+  status        String    @default("pending")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-
-  project       Project?  @relation(fields: [projectId], references: [id])
   contract      Contract? @relation(fields: [contractId], references: [id])
+  project       Project?  @relation(fields: [projectId], references: [id])
 }
