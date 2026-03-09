@@ -628,7 +628,7 @@ export default function DashboardIndexPage() {
                                                                         >
                                                                             {device.designAck && <Check className="w-2.5 h-2.5 text-white stroke-[4]" />}
                                                                         </div>
-                                                                        <span className={device.designAck ? 'text-green-700' : overdue ? 'text-red-500 animate-pulse' : 'text-blue-700'}>设计完成</span>
+                                                                        <span className={`text-[15px] font-black ${device.designAck ? 'text-green-700' : overdue ? 'text-red-500 animate-pulse' : 'text-blue-700'}`}>设计完成</span>
                                                                         <div className="text-[8px] text-gray-400 scale-90">{device.designEst ? format(new Date(device.designEst), 'MM/dd') : '-'}</div>
                                                                     </div>
                                                                 </div>
@@ -660,8 +660,8 @@ export default function DashboardIndexPage() {
                                                                                 {isDone && <Check className="w-2.5 h-2.5 text-white stroke-[4]" />}
                                                                             </div>
                                                                             <div className="flex flex-col items-center gap-0.5">
-                                                                                <span className={`text-[7px] font-black ${isDone ? 'text-indigo-600' : overdue ? 'text-red-500 animate-pulse' : 'text-gray-400 group-hover/part:text-gray-600'}`}>{part.label}</span>
-                                                                                <span className="text-[6px] text-gray-400 scale-[0.85]">{partEst ? format(new Date(partEst), 'MM/dd') : '-'}</span>
+                                                                                <span className={`text-[15px] font-black ${isDone ? 'text-indigo-600' : overdue ? 'text-red-500 animate-pulse' : 'text-gray-400 group-hover/part:text-gray-600'}`}>{part.label}</span>
+                                                                                <span className="text-[10px] text-gray-400 font-bold scale-[0.85]">{partEst ? format(new Date(partEst), 'MM/dd') : '-'}</span>
                                                                             </div>
                                                                         </div>
                                                                     )
@@ -681,7 +681,7 @@ export default function DashboardIndexPage() {
                                                                         >
                                                                             {device.assemblyAck && <Check className="w-2.5 h-2.5 text-white stroke-[4]" />}
                                                                         </div>
-                                                                        <span className={device.assemblyAck ? 'text-green-700' : overdue ? 'text-red-500 animate-pulse' : 'text-purple-700'}>总装</span>
+                                                                        <span className={`text-[15px] font-black ${device.assemblyAck ? 'text-green-700' : overdue ? 'text-red-500 animate-pulse' : 'text-purple-700'}`}>总装</span>
                                                                         <div className="text-[8px] text-gray-400 scale-90">{device.assemblyEst ? format(new Date(device.assemblyEst), 'MM/dd') : '-'}</div>
                                                                     </div>
                                                                 </div>
@@ -700,7 +700,7 @@ export default function DashboardIndexPage() {
                                                                         >
                                                                             {device.debugAck && <Check className="w-2.5 h-2.5 text-white stroke-[4]" />}
                                                                         </div>
-                                                                        <span className={device.debugAck ? 'text-green-700' : overdue ? 'text-red-500 animate-pulse' : 'text-emerald-700'}>调试</span>
+                                                                        <span className={`text-[15px] font-black ${device.debugAck ? 'text-green-700' : overdue ? 'text-red-500 animate-pulse' : 'text-emerald-700'}`}>调试</span>
                                                                         <div className="text-[8px] text-gray-400 scale-90">{device.debugEst ? format(new Date(device.debugEst), 'MM/dd') : '-'}</div>
                                                                     </div>
                                                                 </div>
@@ -721,7 +721,7 @@ export default function DashboardIndexPage() {
                                                                         >
                                                                             {device.shipmentAck && <Check className="w-2.5 h-2.5 text-white stroke-[4]" />}
                                                                         </div>
-                                                                        <span className={device.shipmentAck ? 'text-green-700' : overdue ? 'text-red-500 animate-pulse' : 'text-teal-700'}>发货</span>
+                                                                        <span className={`text-[15px] font-black ${device.shipmentAck ? 'text-green-700' : overdue ? 'text-red-500 animate-pulse' : 'text-teal-700'}`}>发货</span>
                                                                         <div className="text-[8px] text-gray-400 scale-90">{displayDate ? format(displayDate, 'MM/dd') : '-'}</div>
 
 
