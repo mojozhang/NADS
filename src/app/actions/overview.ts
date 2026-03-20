@@ -528,20 +528,10 @@ export async function toggleMilestone(deviceId: string, field: 'designAck' | 'st
         const isActivating = !device[field]
 
         if (isActivating) {
-            // 严格工序校验逻辑 (基于单个设备内部)
-            if (['standardPartAck', 'customPartAck', 'outsourcedPartAck', 'electricalPartAck'].includes(field)) {
-                if (!device.designAck) return { error: "请先确认[设计完成]" }
-            }
-            if (field === 'assemblyAck') {
-                if (!device.standardPartAck || !device.customPartAck || !device.outsourcedPartAck || !device.electricalPartAck) {
-                    return { error: "该设备物料（标准、自制、外协、电气）均未到位，无法进行总装确认" }
-                }
-            }
-            if (field === 'debugAck') {
-                if (!device.assemblyAck) return { error: "请先确认[总装完成]" }
-            }
+            // 解耦逻辑：除了发货外，其他工序均可独立完成。
+            // 只有发货 (shipmentAck) 必须要求调试已完成。
             if (field === 'shipmentAck') {
-                if (!device.debugAck) return { error: "请先确认[调试出厂]" }
+                if (!device.debugAck) return { error: "发货前请先确认[调试出厂]" }
             }
         }
 
@@ -601,12 +591,20 @@ export async function archiveProject(projectId: string) {
         const session = await getServerSession(authOptions)
         if (!session?.user) return { error: "Unauthorized" }
 
-        const project = await prisma.project.findUnique({ where: { id: projectId } })
+        const project = await prisma.project.findUnique({
+            where: { id: projectId },
+            include: { devices: true }
+        })
         if (!project) return { error: "Project not found" }
 
-        const p = project as any
-        if (!p.shipmentAck) {
-            return { error: "项目尚未发货，无法归档" }
+        // 检查所有设备是否都已发货（shipmentAck 在 Device 表上）
+        const devices = (project as any).devices || []
+        if (devices.length === 0) {
+            return { error: "项目没有设备记录，无法归档" }
+        }
+        const allShipped = devices.every((d: any) => d.shipmentAck)
+        if (!allShipped) {
+            return { error: "项目尚未全部发货，无法归档" }
         }
 
         await prisma.project.update({
@@ -660,6 +658,7 @@ export async function deleteProject(projectId: string) {
         })
         await prisma.device.deleteMany({ where: { projectId } })
         await (prisma as any).contract.deleteMany({ where: { projectId } })
+        await (prisma as any).invoice.deleteMany({ where: { projectId } })
         // 删除项目
         await db.project.delete({ where: { id: projectId } })
 

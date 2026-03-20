@@ -5,8 +5,14 @@ import { revalidatePath } from "next/cache"
 
 export async function createClient(data: { name: string; contact?: string; phone?: string }) {
     try {
-        const client = await prisma.client.create({
-            data,
+        const client = await prisma.client.upsert({
+            where: { name: data.name },
+            update: {
+                // 如果存在，按需更新联系方式
+                ...(data.contact ? { contact: data.contact } : {}),
+                ...(data.phone ? { phone: data.phone } : {})
+            },
+            create: data,
         })
         revalidatePath("/dashboard")
         return { success: true, data: client }

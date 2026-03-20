@@ -460,7 +460,10 @@ export async function GET(req: NextRequest) {
         headers: {
             "Content-Type":
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "Content-Disposition": `attachment; filename*=UTF-8''${fileName}`,
+            "Content-Disposition": `attachment; filename="DeviceParts.xlsx"; filename*=UTF-8''${fileName}`,
+            "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
         },
     });
 }

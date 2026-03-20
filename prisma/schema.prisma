@@ -57,7 +57,7 @@ model VerificationToken {
 
 model Client {
   id        String    @id @default(cuid())
-  name      String
+  name      String    @unique
   contact   String?
   phone     String?
   createdAt DateTime  @default(now())
@@ -220,3 +220,13 @@ model Invoice {
   contract      Contract? @relation(fields: [contractId], references: [id])
   project       Project?  @relation(fields: [projectId], references: [id])
 }
+
+model Todo {
+  id        String   @id @default(cuid())
+  content   String
+  receiver  String?
+  completed Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+

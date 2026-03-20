@@ -2,14 +2,14 @@
 
 import { useEffect, useState, useCallback, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { getProjectOverview } from "@/app/actions/overview"
+import { getProjectOverview, archiveProject } from "@/app/actions/overview"
 import { updatePart, createPart, deletePart } from "@/app/actions/procurement"
 import { format, differenceInDays } from "date-fns"
 import {
     Loader2, ArrowLeft, ShoppingCart, CheckCircle2, AlertCircle,
     Download, Cog, Wrench, Plus, Trash2, Zap, Search,
     Briefcase, Calendar, DollarSign, User, Package, ChevronRight,
-    Clock, Receipt, Truck, Info, History, FileDown
+    Clock, Receipt, Truck, Info, History, FileDown, Archive
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -156,6 +156,17 @@ export default function ProjectOverviewPage() {
         await updatePart(partId, { quantity: qty, unitPrice: price, actualCost: qty * price })
     }
 
+    const handleArchive = async () => {
+        if (!confirm("确定要将此项目归档吗？归档后状态将变更为【已完结】。")) return
+        const res = await archiveProject(project.id)
+        if (res.success) {
+            setMessage({ text: "项目归档成功", type: 'success' })
+            fetchData()
+        } else {
+            setMessage({ text: res.error || "归档失败", type: 'error' })
+        }
+    }
+
     const tabs: { key: TabType; label: string; icon: any; color: string }[] = [
         { key: 'standard', label: '标准件', icon: ShoppingCart, color: 'blue' },
         { key: 'machined', label: '机加工', icon: Cog, color: 'purple' },
@@ -197,6 +208,15 @@ export default function ProjectOverviewPage() {
                                 >
                                     <FileDown className="w-4 h-4" /> 发货单下载
                                 </a>
+                            )}
+                            {allShipped && project.status !== 'completed' && (
+                                <Button 
+                                    size="sm" 
+                                    onClick={handleArchive}
+                                    className="ml-2 font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-full shadow-md shadow-amber-200"
+                                >
+                                    <Archive className="w-4 h-4 mr-1.5" /> 归档项目
+                                </Button>
                             )}
                         </div>
                     </div>

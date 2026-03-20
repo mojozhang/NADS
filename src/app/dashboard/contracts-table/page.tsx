@@ -10,6 +10,7 @@ import { format } from "date-fns"
 interface ContractRow {
     id: string
     seq: number
+    displaySeq?: number // 增加展示用序号
     contractNumber: string | null
     companyName: string
     projectName: string
@@ -48,10 +49,10 @@ function calcDerived(row: ContractRow) {
 
 // 列定义
 const COLUMNS = [
-    { key: "seq", label: "编号", width: "w-14", sticky: true, stickyLeft: "left-0", type: "readonly" },
-    { key: "companyName", label: "公司名字", width: "w-36", sticky: true, stickyLeft: "left-14", type: "text", clickable: true },
-    { key: "projectName", label: "设备清单", width: "w-40", sticky: true, stickyLeft: "left-[200px]", type: "text" },
-    { key: "contractNumber", label: "合同编号", width: "w-32", type: "text" },
+    { key: "displaySeq", label: "序号", width: "w-14", sticky: true, stickyLeft: "left-0", type: "readonly" },
+    { key: "contractNumber", label: "合同编号", width: "w-32", sticky: true, stickyLeft: "left-14", type: "text" },
+    { key: "companyName", label: "公司名字", width: "w-36", sticky: true, stickyLeft: "left-[184px]", type: "text", clickable: true },
+    { key: "projectName", label: "设备清单", width: "w-40", type: "text" },
     { key: "contractDate", label: "合同签订日期", width: "w-32", type: "date" },
     { key: "paymentMethod", label: "付款方式", width: "w-28", type: "text" },
     { key: "deliveryDate", label: "设备规定交付日期", width: "w-36", type: "date" },
@@ -126,11 +127,6 @@ export default function ContractsTablePage() {
         fetchData()
     }, [fetchData])
 
-    const handleAddRow = async () => {
-        await upsertContract(null, { companyName: "", projectName: "" })
-        await fetchData()
-    }
-
     const handleDeleteRow = (id: string) => {
         setDeleteConfirm({ open: true, id })
     }
@@ -138,7 +134,8 @@ export default function ContractsTablePage() {
     const confirmDelete = async () => {
         const id = deleteConfirm.id
         setDeleteConfirm({ open: false, id: '' })
-        await deleteContract(id)
+        const res = await deleteContract(id)
+        if (res?.error) alert("删除失败: " + res.error)
         await fetchData()
     }
 
@@ -151,13 +148,21 @@ export default function ContractsTablePage() {
     }
 
     const handleFieldBlur = async (rowId: string, field: string, value: any) => {
-        await updateContractField(rowId, field, value)
+        const res = await updateContractField(rowId, field, value)
+        if (res?.error) {
+            alert("更新失败: " + res.error)
+            await fetchData()
+        }
     }
 
     // checkbox 直接同时更新
     const handleCheckboxChange = async (rowId: string, field: string, checked: boolean) => {
         handleFieldChange(rowId, field, checked)
-        await updateContractField(rowId, field, checked)
+        const res = await updateContractField(rowId, field, checked)
+        if (res?.error) {
+            alert("更新失败: " + res.error)
+            await fetchData() // 恢复正确状态
+        }
     }
 
     const displayedRows = filterCompany
@@ -197,12 +202,6 @@ export default function ContractsTablePage() {
                             <button onClick={() => setFilterCompany(null)} className="ml-1 hover:text-red-500"><X className="w-3 h-3" /></button>
                         </div>
                     )}
-                </div>
-                <div className="flex items-center gap-2">
-                    <Button onClick={handleAddRow} size="sm" className="rounded-lg font-bold text-xs bg-blue-600 hover:bg-blue-700 shadow-sm">
-                        <Plus className="w-3.5 h-3.5 mr-1.5" />
-                        新增行
-                    </Button>
                 </div>
             </div>
 
@@ -250,8 +249,8 @@ export default function ContractsTablePage() {
                                         const alignClass = 'align' in col && col.align === 'right' ? 'text-right' : 'align' in col && col.align === 'center' ? 'text-center' : 'text-left'
 
                                         // 只读序号
-                                        if (col.key === 'seq') {
-                                            return <td key={col.key} className={`${col.width} px-2.5 py-2 border-r border-gray-100 font-mono text-gray-400 ${stickyClass}`}>{row.seq}</td>
+                                        if (col.key === 'displaySeq') {
+                                            return <td key={col.key} className={`${col.width} px-2.5 py-2 border-r border-gray-100 font-mono text-gray-400 ${stickyClass} text-center`}>{row.displaySeq}</td>
                                         }
 
                                         // 公司名（可点击筛选）
@@ -389,7 +388,7 @@ export default function ContractsTablePage() {
                                     <div className="flex flex-col items-center gap-2">
                                         <RefreshCw className="w-8 h-8 text-gray-200" />
                                         <p className="text-sm font-medium">暂无合同数据</p>
-                                        <p className="text-xs">点击「同步项目数据」从已有项目导入，或点击「新增行」手动添加</p>
+                                        <p className="text-xs">合同列表与项目自动同步关联呈现</p>
                                     </div>
                                 </td>
                             </tr>

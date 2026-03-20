@@ -788,6 +788,11 @@ export default function ContractsPage() {
                                             </div>
                                             <p className="text-xs text-gray-600 mb-2">
                                                 <span className="font-medium text-gray-700">相关方:</span> {item.client?.name || '系统处理'}
+                                                {item.contractNumber && (
+                                                    <span className="ml-2 px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 text-[9px] font-mono border">
+                                                        {item.contractNumber}
+                                                    </span>
+                                                )}
                                             </p>
                                             {item.type === 'contract' && (
                                                 <div className="flex flex-wrap gap-2">

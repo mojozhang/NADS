@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { format } from "date-fns"
+import { saveAs } from "file-saver"
 
 type TabType = 'standard' | 'machined' | 'outsourced' | 'electrical'
 
@@ -34,9 +35,11 @@ export default function ProcurementPage() {
     // 本地编辑缓存：用于实时计算小计
     const [localEdits, setLocalEdits] = useState<Record<string, { quantity?: number; unitPrice?: number }>>({})
 
+    // 选中与多选删除
+    const [selectedParts, setSelectedParts] = useState<Set<string>>(new Set())
+
     // 删除确认弹窗
     const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; partId: string; partName: string }>({ open: false, partId: '', partName: '' })
-    const [deleteInput, setDeleteInput] = useState('')
 
     const getPartQuantity = (p: any) => localEdits[p.id]?.quantity ?? p.quantity ?? 1
     const getPartUnitPrice = (p: any) => localEdits[p.id]?.unitPrice ?? p.unitPrice ?? 0
@@ -58,6 +61,7 @@ export default function ProcurementPage() {
             setContractNumber(String((res as any).contractNumber || ""))
             setProjectId((res as any).projectId || "")
             setLocalEdits({}) // 重置本地编辑
+            setSelectedParts(new Set())
         }
         setIsLoading(false)
     }
@@ -173,11 +177,54 @@ export default function ProcurementPage() {
     ]
 
     /** 导出 Excel */
-    const handleExport = () => {
-        window.open(`/api/export-excel?deviceId=${deviceId}`, '_blank')
+    const handleExport = async () => {
+        try {
+            const res = await fetch(`/api/export-excel?deviceId=${deviceId}`)
+            if (!res.ok) throw new Error("下载失败")
+            const blob = await res.blob()
+            
+            // 从 header 尝试提取文件名，没有则给备用名
+            let filename = 'DeviceParts.xlsx'
+            const contentDisposition = res.headers.get('Content-Disposition')
+            if (contentDisposition) {
+                const filenameStarMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
+                if (filenameStarMatch && filenameStarMatch[1]) {
+                    filename = decodeURIComponent(filenameStarMatch[1])
+                }
+            }
+            
+            saveAs(blob, filename)
+        } catch (error) {
+            console.error("导出失败", error)
+            alert("导出失败，请重试")
+        }
+    }
+
+    const handleTemplateDownload = async () => {
+        try {
+            const res = await fetch('/api/export-template')
+            if (!res.ok) throw new Error("下载失败")
+            const blob = await res.blob()
+            saveAs(blob, '采购清单模板.xlsx')
+        } catch (error) {
+            console.error("下载模板失败", error)
+            alert("下载模板失败，请重试")
+        }
     }
 
     const currentParts = parts[activeTab]
+
+    const handleSelectAll = (checked: boolean) => {
+        if (checked) setSelectedParts(new Set(currentParts.map((p: any) => p.id)))
+        else setSelectedParts(new Set())
+    }
+
+    const handleSelectRow = (id: string, checked: boolean) => {
+        const newSet = new Set(selectedParts)
+        if (checked) newSet.add(id)
+        else newSet.delete(id)
+        setSelectedParts(newSet)
+    }
 
     if (isLoading) {
         return (
@@ -223,7 +270,13 @@ export default function ProcurementPage() {
                     </div>
                 </div>
                 <div className="flex gap-3 items-center">
-                    <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleUpload} className="hidden" />
+                    {selectedParts.size > 0 && (
+                        <Button onClick={() => setDeleteConfirm({ open: true, partId: 'bulk', partName: `已选中的 ${selectedParts.size} 个零件` })} className="rounded-xl font-bold shadow-sm text-white bg-red-600 hover:bg-red-700">
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            批量删除 ({selectedParts.size})
+                        </Button>
+                    )}
+                    <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleUpload} className="w-0 h-0 opacity-0 overflow-hidden absolute -z-10" />
                     <Button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="rounded-xl bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-100 font-bold">
                         {isUploading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
                         {isUploading ? '导入中...' : '上传 Excel 清单'}
@@ -232,17 +285,17 @@ export default function ProcurementPage() {
                         <Download className="w-4 h-4 mr-2" />
                         下载 Excel
                     </Button>
-                    <Button onClick={() => window.open('/api/export-template', '_blank')} variant="outline" className="rounded-xl font-bold border-dashed border-gray-300 hover:bg-gray-50 text-gray-500">
+                    <Button onClick={handleTemplateDownload} variant="outline" className="rounded-xl font-bold border-dashed border-gray-300 hover:bg-gray-50 text-gray-500">
                         <Download className="w-4 h-4 mr-2" />
                         下载模板
                     </Button>
                 </div>
+
             </div>
 
-            {/* 统计卡片 */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {tabs.map(tab => (
-                    <div key={tab.key} onClick={() => setActiveTab(tab.key)} className={`cursor-pointer bg-white p-5 rounded-2xl border shadow-sm flex items-center justify-between transition-all ${activeTab === tab.key ? `border-blue-400 ring-2 ring-blue-100` : 'border-gray-100 hover:border-gray-200'}`}>
+                    <div key={tab.key} onClick={() => { setActiveTab(tab.key); setSelectedParts(new Set()); }} className={`cursor-pointer bg-white p-5 rounded-2xl border shadow-sm flex items-center justify-between transition-all ${activeTab === tab.key ? `border-blue-400 ring-2 ring-blue-100` : 'border-gray-100 hover:border-gray-200'}`}>
                         <div>
                             <p className="text-xs font-bold text-gray-400 uppercase mb-1">{tab.label}</p>
                             <p className="text-2xl font-black text-gray-900">{parts[tab.key].length}</p>
@@ -260,7 +313,7 @@ export default function ProcurementPage() {
             {/* Tab 切换 */}
             <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
                 {tabs.map(tab => (
-                    <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === tab.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                    <button key={tab.key} onClick={() => { setActiveTab(tab.key); setSelectedParts(new Set()); }} className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === tab.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
                         <tab.icon className="w-4 h-4" />
                         {tab.label}
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${activeTab === tab.key ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-500'}`}>
@@ -277,6 +330,7 @@ export default function ProcurementPage() {
                     <table className="w-full text-left text-sm">
                         <thead>
                             <tr className="bg-gray-50 border-b border-gray-100">
+                                <th className="px-3 py-3 w-10 text-center"><input type="checkbox" checked={currentParts.length > 0 && selectedParts.size === currentParts.length} onChange={(e) => handleSelectAll(e.target.checked)} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4" /></th>
                                 <th className="px-3 py-3 text-xs font-black text-gray-500 uppercase w-10">序号</th>
                                 <th className="px-3 py-3 text-xs font-black text-gray-500 uppercase">供应商</th>
                                 <th className="px-3 py-3 text-xs font-black text-gray-500 uppercase">名称</th>
@@ -298,6 +352,7 @@ export default function ProcurementPage() {
                         <tbody className="divide-y divide-gray-50">
                             {currentParts.map((p: any, idx: number) => (
                                 <tr key={p.id} className={`hover:bg-blue-50/30 transition-colors ${p.isStocked ? 'bg-green-50/20' : ''}`}>
+                                    <td className="px-3 py-2.5 text-center"><input type="checkbox" checked={selectedParts.has(p.id)} onChange={(e) => handleSelectRow(p.id, e.target.checked)} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4" /></td>
                                     <td className="px-3 py-2.5 text-gray-400 font-mono text-xs">{idx + 1}</td>
                                     <td className="px-3 py-2.5"><input type="text" defaultValue={p.supplier || ''} onBlur={(e) => handleFieldChange(p.id, 'supplier', e.target.value)} className="text-xs bg-transparent border-b border-transparent hover:border-gray-200 focus:border-blue-500 outline-none py-0.5 w-full font-medium text-gray-700" /></td>
                                     <td className="px-3 py-2.5"><input type="text" defaultValue={p.name || ''} onBlur={(e) => handleFieldChange(p.id, 'name', e.target.value)} className="text-xs bg-transparent border-b border-transparent hover:border-gray-200 focus:border-blue-500 outline-none py-0.5 w-full font-bold text-gray-900" /></td>
@@ -374,7 +429,7 @@ export default function ProcurementPage() {
                                         </button>
                                     </td>
                                     <td className="px-3 py-2.5 text-center">
-                                        <button onClick={() => { setDeleteConfirm({ open: true, partId: p.id, partName: p.name || `#${idx + 1}` }); setDeleteInput('') }} className="w-6 h-6 rounded-md flex items-center justify-center mx-auto text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all">
+                                        <button onClick={() => setDeleteConfirm({ open: true, partId: p.id, partName: p.name || `#${idx + 1}` })} className="w-6 h-6 rounded-md flex items-center justify-center mx-auto text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all">
                                             <Trash2 className="w-3.5 h-3.5" />
                                         </button>
                                     </td>
@@ -383,14 +438,14 @@ export default function ProcurementPage() {
                         </tbody>
                         <tfoot>
                             <tr className="bg-gray-50 border-t-2 border-gray-200">
-                                <td colSpan={10} className="px-3 py-3 text-right font-bold text-gray-600">合计</td>
+                                <td colSpan={11} className="px-3 py-3 text-right font-bold text-gray-600">合计</td>
                                 <td className="px-3 py-3 text-right font-black text-blue-700 text-sm bg-blue-50/30">
                                     ¥{getTotal(currentParts).toFixed(2)}
                                 </td>
                                 <td colSpan={4}></td>
                             </tr>
                             <tr>
-                                <td colSpan={15} className="px-3 py-2">
+                                <td colSpan={16} className="px-3 py-2">
                                     <button onClick={async () => {
                                         const res = await createPart(deviceId, 'standard');
                                         if (res.error) {
@@ -500,7 +555,7 @@ export default function ProcurementPage() {
                                         <input type="text" defaultValue={p.remark || ''} onBlur={(e) => handleRemarkChange(p.id, e.target.value)} className="text-xs bg-transparent border-b border-gray-200 focus:border-blue-500 outline-none py-0.5 w-full" placeholder="添加备注..." />
                                     </td>
                                     <td className="px-3 py-2.5 text-center">
-                                        <button onClick={() => { setDeleteConfirm({ open: true, partId: p.id, partName: p.name || `#${idx + 1}` }); setDeleteInput('') }} className="w-6 h-6 rounded-md flex items-center justify-center mx-auto text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all">
+                                        <button onClick={() => setDeleteConfirm({ open: true, partId: p.id, partName: p.name || `#${idx + 1}` })} className="w-6 h-6 rounded-md flex items-center justify-center mx-auto text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all">
                                             <Trash2 className="w-3.5 h-3.5" />
                                         </button>
                                     </td>
@@ -509,14 +564,14 @@ export default function ProcurementPage() {
                         </tbody>
                         <tfoot>
                             <tr className="bg-gray-50 border-t-2 border-gray-200">
-                                <td colSpan={9} className="px-3 py-3 text-right font-bold text-gray-600">合计</td>
+                                <td colSpan={10} className="px-3 py-3 text-right font-bold text-gray-600">合计</td>
                                 <td className="px-3 py-3 text-right font-black text-blue-700 text-sm bg-purple-50/30">
                                     ¥{getTotal(currentParts).toFixed(2)}
                                 </td>
                                 <td colSpan={3}></td>
                             </tr>
                             <tr>
-                                <td colSpan={13} className="px-3 py-2">
+                                <td colSpan={14} className="px-3 py-2">
                                     <button onClick={async () => {
                                         const res = await createPart(deviceId, activeTab);
                                         if (res.error) {
@@ -535,30 +590,32 @@ export default function ProcurementPage() {
             </div>
 
             {/* 删除确认弹窗 */}
-            <Dialog open={deleteConfirm.open} onOpenChange={(open) => { if (!open) { setDeleteConfirm({ open: false, partId: '', partName: '' }); setDeleteInput('') } }}>
+            <Dialog open={deleteConfirm.open} onOpenChange={(open) => { if (!open) setDeleteConfirm({ open: false, partId: '', partName: '' }) }}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle className="text-red-600">确认删除</DialogTitle>
                         <DialogDescription>
-                            确定要删除零件 <span className="font-bold text-gray-900">{deleteConfirm.partName}</span> 吗？此操作不可撤销。
-                            <br />请在下方输入 <span className="font-mono font-bold text-red-600">DELETE</span> 确认删除。
+                            确定要删除 <span className="font-bold text-gray-900">{deleteConfirm.partName}</span> 吗？此操作不可撤销。
                         </DialogDescription>
                     </DialogHeader>
-                    <Input
-                        value={deleteInput}
-                        onChange={(e) => setDeleteInput(e.target.value)}
-                        placeholder="请输入 DELETE"
-                        className="font-mono"
-                    />
+                    <div className="py-2"></div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => { setDeleteConfirm({ open: false, partId: '', partName: '' }); setDeleteInput('') }}>取消</Button>
+                        <Button variant="outline" onClick={() => setDeleteConfirm({ open: false, partId: '', partName: '' })}>取消</Button>
                         <Button
-                            disabled={deleteInput !== 'DELETE'}
-                            className="bg-red-600 hover:bg-red-700 disabled:opacity-40"
+                            className="bg-red-600 hover:bg-red-700 text-white"
                             onClick={async () => {
-                                await deletePart(deleteConfirm.partId)
+                                if (deleteConfirm.partId === 'bulk') {
+                                    // 批量删除
+                                    await Promise.all(Array.from(selectedParts).map(id => deletePart(id)))
+                                    setSelectedParts(new Set())
+                                } else {
+                                    await deletePart(deleteConfirm.partId)
+                                    // 若删除的对象在选中列表中，也剃除掉
+                                    const newSet = new Set(selectedParts)
+                                    newSet.delete(deleteConfirm.partId)
+                                    setSelectedParts(newSet)
+                                }
                                 setDeleteConfirm({ open: false, partId: '', partName: '' })
-                                setDeleteInput('')
                                 await fetchData()
                             }}
                         >

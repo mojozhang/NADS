@@ -33,7 +33,7 @@ export async function getDevicePartsByType(deviceId: string) {
             success: true,
             deviceCategory: (device as any).category,
             projectTitle: (device as any).project.name,
-            contractNumber: (device as any).project?.contract?.contractNumber || '',
+            contractNumber: (device as any).project?.contractNumber || '',
             projectId: (device as any).projectId,
             standard: parts.filter((p: any) => p.type === 'standard'),
             machined: parts.filter((p: any) => p.type === 'machined'),

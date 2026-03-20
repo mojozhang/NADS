@@ -24,6 +24,7 @@
     "date-fns-tz": "^3.2.0",
     "docx": "^9.6.0",
     "exceljs": "^4.4.0",
+    "file-saver": "^2.0.5",
     "lucide-react": "^0.576.0",
     "next": "14.2.35",
     "next-auth": "^4.24.13",
@@ -37,6 +38,7 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/file-saver": "^2.0.7",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

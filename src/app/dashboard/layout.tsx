@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import SignOutButton from "@/components/auth/SignOutButton"
 import { redirect } from "next/navigation"
+import TodoPanel from "@/components/dashboard/TodoPanel"
 
 export default async function DashboardLayout({
     children,
@@ -15,9 +16,9 @@ export default async function DashboardLayout({
     }
 
     return (
-        <div className="flex h-screen w-full bg-gray-50/50">
-            {/* 侧边栏 */}
-            <aside className="w-64 border-r border-gray-200 bg-white shadow-sm flex flex-col h-full">
+        <div className="flex h-screen w-full bg-gray-50/50 overflow-hidden">
+            {/* 侧边栏 - 修改为 30% 宽度 (w-[30%]) */}
+            <aside className="w-[30%] min-w-[320px] max-w-[450px] border-r border-gray-200 bg-white shadow-sm flex flex-col h-full">
                 <div className="flex h-16 items-center border-b border-gray-100 px-6 shrink-0">
                     <img src="/logo.jpg" alt="GAODE" className="h-8 w-auto object-contain" />
                 </div>
@@ -53,9 +54,12 @@ export default async function DashboardLayout({
                         专家知识库
                     </a>
                 </nav>
+
+                {/* 通知栏渲染在侧边栏底部 */}
+                <TodoPanel />
             </aside>
 
-            {/* 主体区域与顶部导航 */}
+            {/* 主体区域与顶部导航 - flex-1 占据剩余 70% */}
             <main className="flex-1 flex flex-col h-screen overflow-hidden">
                 <header className="flex h-16 items-center justify-between border-b border-gray-100 bg-white px-8 shrink-0">
                     <h2 className="text-xl font-bold text-gray-800">
@@ -67,7 +71,6 @@ export default async function DashboardLayout({
                     </div>
                 </header>
 
-                {/* 页面内容在可滚动的容器内渲染 */}
                 <div className="flex-1 overflow-auto">
                     {children}
                 </div>
@@ -75,3 +78,4 @@ export default async function DashboardLayout({
         </div>
     )
 }
+

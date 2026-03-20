@@ -27,10 +27,12 @@ export async function POST(req: NextRequest) {
 
         let contract = project.contract
         if (!contract) {
-            // 如果不存在合同记录，则新建
+            // 如果不存在合同记录，则新建（含正确的 seq 分配）
+            const maxSeq = await (prisma as any).contract.aggregate({ _max: { seq: true } })
             contract = await (prisma as any).contract.create({
                 data: {
                     projectId: project.id,
+                    seq: (maxSeq._max.seq ?? 0) + 1,
                     invoicedAmount: amount
                 }
             })

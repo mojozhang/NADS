@@ -80,19 +80,19 @@ export async function getContracts() {
             projectId: null,
             seq: c.seq || 0,
             contractNumber: null,
-            companyName: c.companyName || "",
-            projectName: c.projectName || "",
-            contractDate: c.contractDate,
-            paymentMethod: c.paymentMethod,
-            deliveryDate: c.deliveryDate,
+            companyName: "",  // Contract 表无此字段，独立合同无法显示名称
+            projectName: "",  // Contract 表无此字段
+            contractDate: null,
+            paymentMethod: null,
+            deliveryDate: null,
             acceptanceDate: c.acceptanceDate,
-            shipmentAck: c.shipDate,
-            contractAmount: c.contractAmount || 0,
+            shipmentAck: null,
+            contractAmount: 0,
             invoicedAmount: c.invoicedAmount || 0,
             completed: c.completed || false,
             paymentRemark: c.paymentRemark,
-            payTime1: c.payTime1,
-            payAmount1: c.payAmount1 || 0,
+            payTime1: null,
+            payAmount1: 0,
             payTime2: c.payTime2,
             payAmount2: c.payAmount2 || 0,
             payTime3: c.payTime3,
@@ -104,16 +104,27 @@ export async function getContracts() {
             remark2: c.remark2,
             remark3: c.remark3,
             remark4: c.remark4,
-            isVirtual: false
+            isVirtual: false,
+            createdAt: c.createdAt,
         }))
 
-        // 5. 合并并排序
+        // 5. 合并
         const viewData = [...projectModels, ...standaloneModels]
 
-        // 排序：按 seq 排序（seq 仍由 Contract 表维护）
-        viewData.sort((a, b) => (a.seq || 999) - (b.seq || 999))
+        // 6. 统一按创建时间排序后，重新分配展示用的 seq (如果数据库中的 seq 不连续或为0)
+        viewData.sort((a, b) => {
+            // 优先按数据库已有的 seq 排序，如果 seq 相同或为0，按项目创建时间降序（最新的在前）
+            if ((a.seq || 0) !== (b.seq || 0)) return (a.seq || 999) - (b.seq || 999)
+            return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+        })
 
-        return { success: true, data: viewData }
+        // 用数组索引重写展示用的 seq 确保视觉上是从 1 开始的连续数字
+        const finalData = viewData.map((item, index) => ({
+            ...item,
+            displaySeq: index + 1
+        }))
+
+        return { success: true, data: finalData }
     } catch (error: any) {
         return { success: false, error: error.message }
     }
@@ -131,18 +142,9 @@ export async function upsertContract(id: string | null, data: any) {
             await db.contract.update({
                 where: { id },
                 data: {
-                    companyName: data.companyName,
-                    projectName: data.projectName,
-                    contractDate: data.contractDate ? new Date(data.contractDate) : null,
-                    paymentMethod: data.paymentMethod,
-                    deliveryDate: data.deliveryDate ? new Date(data.deliveryDate) : null,
                     acceptanceDate: data.acceptanceDate ? new Date(data.acceptanceDate) : null,
-                    shipDate: data.shipDate ? new Date(data.shipDate) : null,
-                    contractAmount: data.contractAmount ?? 0,
                     invoicedAmount: data.invoicedAmount ?? 0,
                     paymentRemark: data.paymentRemark,
-                    payTime1: data.payTime1,
-                    payAmount1: data.payAmount1 ?? 0,
                     payTime2: data.payTime2,
                     payAmount2: data.payAmount2 ?? 0,
                     payTime3: data.payTime3,
@@ -156,18 +158,46 @@ export async function upsertContract(id: string | null, data: any) {
                     remark4: data.remark4,
                 }
             })
+
+            // 联动更新：如果是项目关联合同，更新 Client.name 和 Project.name
+            const contract = await db.contract.findUnique({
+                where: { id },
+                select: { projectId: true }
+            })
+            if (contract?.projectId && data.companyName) {
+                const project = await db.project.findUnique({
+                    where: { id: contract.projectId },
+                    select: { clientId: true }
+                })
+                if (project) {
+                    // 更新项目名称 (如果需要)
+                    if (data.projectName) {
+                        await db.project.update({ 
+                            where: { id: contract.projectId }, 
+                            data: { name: data.projectName } 
+                        })
+                    }
+                    // 更新客户名称
+                    if (project.clientId) {
+                        await db.client.update({
+                            where: { id: project.clientId },
+                            data: { name: data.companyName }
+                        })
+                    }
+                }
+            }
+
+
         } else {
-            // 新建时自动分配 seq
             const maxSeq = await db.contract.aggregate({ _max: { seq: true } })
             await db.contract.create({
                 data: {
                     seq: (maxSeq._max.seq ?? 0) + 1,
-                    companyName: data.companyName || "",
-                    projectName: data.projectName || "",
-                    contractAmount: data.contractAmount ?? 0,
+                    // 不再向 Contract 写入任何冗余与剥离出的字段
                 }
             })
         }
+
 
         return { success: true }
     } catch (error: any) {
@@ -255,11 +285,16 @@ export async function updateContractField(id: string, field: string, value: any)
                 })
                 contractId = newC.id
             } else if (contractId) {
-                await db.contract.update({
-                    where: { id: contractId },
-                    data: { [field]: procVal }
-                })
+                // 确保更新字段是在 Contract 表中定义的真实属性
+                const allowedContractFields = ['acceptanceDate', 'invoicedAmount', 'completed', 'paymentRemark', 'payTime2', 'payAmount2', 'payTime3', 'payAmount3', 'payTime4', 'payAmount4', 'paymentNote', 'remark1', 'remark2', 'remark3', 'remark4', 'seq']
+                if (allowedContractFields.includes(field)) {
+                    await db.contract.update({
+                        where: { id: contractId },
+                        data: { [field]: procVal }
+                    })
+                }
             }
+
         }
 
         return { success: true }
@@ -289,6 +324,7 @@ export async function deleteContract(id: string) {
                 where: { device: { projectId: projectId } }
             })
             await prisma.device.deleteMany({ where: { projectId } })
+            await (prisma as any).invoice.deleteMany({ where: { projectId } })
             await (prisma as any).contract.deleteMany({ where: { projectId } })
             await db.project.delete({ where: { id: projectId } })
         } else {
@@ -305,6 +341,7 @@ export async function deleteContract(id: string) {
                     where: { device: { projectId: projectId } }
                 })
                 await db.device.deleteMany({ where: { projectId } })
+                await db.invoice.deleteMany({ where: { projectId } })
                 await db.contract.deleteMany({ where: { projectId } }) // 会连带删除此 contract
                 await db.project.delete({ where: { id: projectId } })
             } else {

@@ -21,6 +21,7 @@ export async function getRecentProjects() {
         const projectHistory = projects.map(p => ({
             id: p.id,
             name: p.name,
+            contractNumber: p.contractNumber, // 补充合同编号显示
             client: p.client,
             devices: p.devices,
             createdAt: p.createdAt,
@@ -109,11 +110,11 @@ export async function addPaymentRecord(projectId: string, amount: number, paymen
 
         if (!contract) {
             console.log("Creating new contract record...");
-            const count = await db.contract.count()
+            const maxSeq = await db.contract.aggregate({ _max: { seq: true } })
             contract = await db.contract.create({
                 data: {
                     projectId,
-                    seq: count + 1
+                    seq: (maxSeq._max.seq ?? 0) + 1
                 }
             })
         }

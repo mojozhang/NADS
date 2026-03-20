@@ -79,7 +79,10 @@ export async function GET() {
     return new NextResponse(buffer, {
         headers: {
             'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent('采购清单模板.xlsx')}`,
+            'Content-Disposition': `attachment; filename="Template.xlsx"; filename*=UTF-8''${encodeURIComponent('采购清单模板.xlsx')}`,
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
         }
     })
 }

@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
         for (const sheetName of workbook.SheetNames) {
             const sheet = workbook.Sheets[sheetName]
 
-            // 判断 Sheet 类型（通过 Sheet 名称）
+            // 判断 Sheet 类型（优先通过 Sheet 名称）
             let type: string | null = null
             const nameStr = sheetName
             if (nameStr.includes("标准") || nameStr.includes("standard")) {
@@ -58,6 +58,20 @@ export async function POST(request: NextRequest) {
                 type = "outsourced"
             } else if (nameStr.includes("电气") || nameStr.includes("电控") || nameStr.includes("electrical")) {
                 type = "electrical"
+            }
+
+            // 如果 Sheet 名字并没有明确指明类型（比如叫 Sheet1），则尝试从整个文件的文件名来推断
+            if (!type) {
+                const fileName = file.name || ""
+                if (fileName.includes("标准") || fileName.includes("standard")) {
+                    type = "standard"
+                } else if (fileName.includes("机加工") || fileName.includes("机加") || fileName.includes("machined")) {
+                    type = "machined"
+                } else if (fileName.includes("外协") || fileName.includes("外发") || fileName.includes("outsource")) {
+                    type = "outsourced"
+                } else if (fileName.includes("电气") || fileName.includes("电控") || fileName.includes("electrical")) {
+                    type = "electrical"
+                }
             }
 
             // 将 Sheet 转为二维数组，逐行查找列头
@@ -139,6 +153,7 @@ export async function POST(request: NextRequest) {
                 return isNaN(parsed.getTime()) ? null : parsed
             }
 
+            const partsToCreate: any[] = []
             // 遍历数据行
             for (let i = headerRowIdx + 1; i < rawData.length; i++) {
                 const row = rawData[i]
@@ -174,11 +189,18 @@ export async function POST(request: NextRequest) {
                     partData.isStocked = stockVal === "✓" || stockVal === "√" || stockVal === "是" || stockVal === "1"
                 }
 
+                partsToCreate.push(partData)
+            }
+
+            if (partsToCreate.length > 0) {
                 try {
-                    await prisma.part.create({ data: partData })
-                    results[type as keyof typeof results]++
+                    await prisma.part.createMany({ data: partsToCreate })
+                    if (type === 'standard') results.standard += partsToCreate.length
+                    else if (type === 'machined') results.machined += partsToCreate.length
+                    else if (type === 'outsourced') results.outsourced += partsToCreate.length
+                    else if (type === 'electrical') results.electrical += partsToCreate.length
                 } catch (e: any) {
-                    console.error(`Failed to insert part "${name}":`, e.message)
+                    console.error(`Failed to batch insert parts for sheet "${sheetName}":`, e.message)
                 }
             }
         }

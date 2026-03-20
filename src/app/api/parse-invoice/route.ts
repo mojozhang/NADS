@@ -175,8 +175,9 @@ export async function POST(req: NextRequest) {
         let contract = (project as any).contract
 
         if (!contract) {
+            const maxSeq = await (prisma as any).contract.aggregate({ _max: { seq: true } })
             contract = await (prisma as any).contract.create({
-                data: { projectId: project.id, invoicedAmount: amount }
+                data: { projectId: project.id, seq: (maxSeq._max.seq ?? 0) + 1, invoicedAmount: amount }
             })
         } else {
             await (prisma as any).contract.update({
