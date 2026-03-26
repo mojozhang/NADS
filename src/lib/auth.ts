@@ -27,7 +27,7 @@ export const authOptions: AuthOptions = {
 
                 if (!user || (!user.password && user.email !== "admin@example.com")) {
                     // 如果数据库没有密码且不是内置保留账号处理
-                    if (credentials.email === "admin@example.com" && credentials.password === "123456") {
+                    if (process.env.NODE_ENV !== "production" && credentials.email === "admin@example.com" && credentials.password === "123456") {
                         // 预留的写死账户方便测试登录，等第一版过了可以去掉
                         const mockUser = { id: "1", name: "Administrator", email: "admin@example.com", role: "admin" }
                         return mockUser

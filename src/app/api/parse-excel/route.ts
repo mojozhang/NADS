@@ -41,8 +41,8 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "设备不存在" }, { status: 404 })
         }
 
-        // 清除该设备下关联的旧零件（覆盖导入逻辑）
-        await prisma.part.deleteMany({ where: { deviceId } })
+        // 稍后在所有数据解析完毕后，于 $transaction 中清除旧数据并插入新数据
+        const allPartsToCreate: any[] = []
 
         for (const sheetName of workbook.SheetNames) {
             const sheet = workbook.Sheets[sheetName]
@@ -193,16 +193,23 @@ export async function POST(request: NextRequest) {
             }
 
             if (partsToCreate.length > 0) {
-                try {
-                    await prisma.part.createMany({ data: partsToCreate })
-                    if (type === 'standard') results.standard += partsToCreate.length
-                    else if (type === 'machined') results.machined += partsToCreate.length
-                    else if (type === 'outsourced') results.outsourced += partsToCreate.length
-                    else if (type === 'electrical') results.electrical += partsToCreate.length
-                } catch (e: any) {
-                    console.error(`Failed to batch insert parts for sheet "${sheetName}":`, e.message)
-                }
+                allPartsToCreate.push(...partsToCreate)
+                if (type === 'standard') results.standard += partsToCreate.length
+                else if (type === 'machined') results.machined += partsToCreate.length
+                else if (type === 'outsourced') results.outsourced += partsToCreate.length
+                else if (type === 'electrical') results.electrical += partsToCreate.length
             }
+        }
+
+        // 使用事务：先删除再创建，防止因异常抛出导致数据永久丢失
+        try {
+            await prisma.$transaction([
+                prisma.part.deleteMany({ where: { deviceId } }),
+                ...(allPartsToCreate.length > 0 ? [prisma.part.createMany({ data: allPartsToCreate })] : [])
+            ])
+        } catch (e: any) {
+            console.error("Failed to batch insert parts in transaction:", e.message)
+            return NextResponse.json({ error: "批量插入数据失败，请检查数据格式" }, { status: 500 })
         }
 
         const total = results.standard + results.machined + results.outsourced + results.electrical

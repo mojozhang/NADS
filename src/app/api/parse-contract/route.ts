@@ -204,132 +204,90 @@ export async function POST(req: NextRequest) {
         let rawText = ""
 
         if (isPDF) {
-            // 首先尝试文字提取
             rawText = await extractTextFromPDF(buffer, selectedPages)
-
-            // 阈值判断：如果提取出的有效字符太少，说明是扫描件，强制进入 VLM
-            if (rawText.length < 200) {
-                console.log("[Contract Parse] Too little text found, switching to VLM OCR mode...")
+            if (rawText.replace(/\s+/g, '').length < 50) {
                 rawText = await extractOCRWithSiliconFlow(buffer, file.type, file.name, selectedPages)
-            } else {
-                console.log(`[Contract Parse] Fast Track success! Extracted ${rawText.length} characters.`)
             }
         } else {
-            // 图片只能走 VLM
-            rawText = await extractOCRWithSiliconFlow(buffer, file.type, file.name, null)
+            rawText = await extractOCRWithSiliconFlow(buffer, file.type, file.name, selectedPages)
         }
 
-        if (!rawText || rawText.length < 10) {
-            throw new Error("无法从文档中提取足够文字，请确保文档清晰。")
-        }
-
-        // 2. 结构化解析
-        console.log("[Contract Parse] Step 2: Refining text to JSON with DeepSeek...")
         const jsonText = await refineJSONWithDeepSeek(rawText)
-        if (!jsonText) {
-            throw new Error("模型未能生成有效的 JSON 数据。")
-        }
+        const cleanText = jsonText.replace(/```jsons*|s*```/g, '').trim()
+        const parsedData = JSON.parse(cleanText)
 
-        // 3. 解析并入库 (复用原有稳定逻辑)
-        let parsedData
-        try {
-            const cleanText = jsonText.replace(/```json\s*|\s*```/g, '').trim()
-            parsedData = JSON.parse(cleanText)
+        const clientName = (parsedData.buyerName || '').trim()
+        let client = await prisma.client.findFirst({ where: { name: clientName } })
+        if (!client) { client = await prisma.client.create({ data: { name: clientName } }) }
 
-            // --- 强制文档类型检查 ---
-            if (parsedData.documentType === 'invoice') {
-                return NextResponse.json({ error: "检测到上传的是【发票】，请切换到“上传发票”模式后再试。" }, { status: 400 })
+        const result = await prisma.$transaction(async (tx) => {
+            const signDate = parsedData.contractSignDate ? new Date(parsedData.contractSignDate) : new Date()
+            const dateStr = `${signDate.getFullYear()}${String(signDate.getMonth() + 1).padStart(2, '0')}${String(signDate.getDate()).padStart(2, '0')}`
+            const cnPrefix = `GD${dateStr}`
+
+            // 查找当天最大的编号并递增（事务保护防止竞态）
+            const existingCN = await (tx as any).project.findMany({
+                where: { contractNumber: { startsWith: cnPrefix } },
+                select: { contractNumber: true },
+                orderBy: { contractNumber: 'desc' },
+                take: 1
+            })
+
+            let cnSeq = 1
+            if (existingCN.length > 0 && existingCN[0].contractNumber) {
+                const lastSeq = parseInt(existingCN[0].contractNumber.slice(-2))
+                if (!isNaN(lastSeq)) cnSeq = lastSeq + 1
             }
-            if (parsedData.documentType !== 'contract') {
-                return NextResponse.json({ error: "无法识别的文件类型，请确保上传的是有效的【合同或协议】。" }, { status: 400 })
+            const contractNumber = `${cnPrefix}${String(cnSeq).padStart(2, '0')}`
+
+            const project = await (tx as any).project.create({
+                data: {
+                    clientId: client.id,
+                    name: clientName,
+                    contractNumber,
+                    amount: parsedData.totalAmount || null,
+                    paymentTerm: parsedData.paymentTerm,
+                    deliveryRaw: parsedData.deliveryRaw,
+                    deliveryType: parsedData.deliveryType || "natural",
+                    deliveryDays: parsedData.deliveryDays || null,
+                    deliveryTrigger: parsedData.deliveryTrigger || "contract",
+                    delivery: (() => {
+                        if (parsedData.deliveryType !== "absolute" || !parsedData.deliveryRaw) return null;
+                        const stdMatch = parsedData.deliveryRaw.match(/(\d{4})[-\/年](\d{1,2})[-\/月](\d{1,2})[日]?/);
+                        if (stdMatch) {
+                            return new Date(`${stdMatch[1]}-${stdMatch[2].padStart(2, '0')}-${stdMatch[3].padStart(2, '0')}`);
+                        }
+                        const shortMatch = parsedData.deliveryRaw.match(/(\d{1,2})[月\.\/](\d{1,2})[日]?/);
+                        if (shortMatch) {
+                            const year = signDate.getFullYear();
+                            return new Date(`${year}-${shortMatch[1].padStart(2, '0')}-${shortMatch[2].padStart(2, '0')}`);
+                        }
+                        return null;
+                    })(),
+                    contractSignDate: parsedData.contractSignDate ? new Date(parsedData.contractSignDate) : null,
+                }
+            })
+
+            if (parsedData.devices && Array.isArray(parsedData.devices)) {
+                let deviceSeq = 1
+                for (const d of parsedData.devices) {
+                    await tx.device.create({
+                        data: {
+                            projectId: project.id,
+                            deviceNumber: `${contractNumber}-${String(deviceSeq++).padStart(2, '0')}`,
+                            category: d.category || "未命名设备",
+                            quantity: d.quantity || 1,
+                            price: d.price || null,
+                            techSpecs: `${d.techSpecs}\n\n**附件协议/要求:** ${d.delivery}\n**发票描述:** ${parsedData.invoiceStatus}`
+                        }
+                    })
+                }
             }
-        } catch (jsonErr) {
-            console.error("Failed to parse AI JSON:", jsonText)
-            return NextResponse.json({ error: "AI 返回格式无法解析", raw: jsonText }, { status: 500 })
-        }
 
-        // 数据库落库操作 (保持原样)
-        let clientName = parsedData.clientName || '未知客户'
-        if (clientName === '上海高得自动化设备有限公司') {
-            clientName = '未知客户'
-        }
-
-        const client = await prisma.client.upsert({
-            where: { name: clientName },
-            update: {},
-            create: { name: clientName }
+            return project
         })
 
-        const signDate = parsedData.contractSignDate ? new Date(parsedData.contractSignDate) : new Date()
-        const dateStr = `${signDate.getFullYear()}${String(signDate.getMonth() + 1).padStart(2, '0')}${String(signDate.getDate()).padStart(2, '0')}`
-        const cnPrefix = `GD${dateStr}`
-
-        // 查找当天最大的编号并递增
-        // 使用原子更新前预计算，减少逻辑竞态
-        const existingCN = await (prisma.project as any).findMany({
-            where: { contractNumber: { startsWith: cnPrefix } },
-            select: { contractNumber: true },
-            orderBy: { contractNumber: 'desc' },
-            take: 1
-        })
-
-        let cnSeq = 1
-        if (existingCN.length > 0 && existingCN[0].contractNumber) {
-            const lastSeq = parseInt(existingCN[0].contractNumber.slice(-2))
-            if (!isNaN(lastSeq)) cnSeq = lastSeq + 1
-        }
-        const contractNumber = `${cnPrefix}${String(cnSeq).padStart(2, '0')}`
-
-        const project = await (prisma.project as any).create({
-            data: {
-                clientId: client.id,
-                name: clientName,
-                contractNumber, // 直接在创建时写入编号
-                amount: parsedData.totalAmount || null,
-                paymentTerm: parsedData.paymentTerm,
-                deliveryRaw: parsedData.deliveryRaw,
-                deliveryType: parsedData.deliveryType || "natural",
-                deliveryDays: parsedData.deliveryDays || null,
-                deliveryTrigger: parsedData.deliveryTrigger || "contract",
-                delivery: (() => {
-                    if (parsedData.deliveryType !== "absolute" || !parsedData.deliveryRaw) return null;
-
-                    // 1. 尝试匹配标准的 YYYY-MM-DD
-                    const stdMatch = parsedData.deliveryRaw.match(/(\d{4})[-\/年](\d{1,2})[-\/月](\d{1,2})[日]?/);
-                    if (stdMatch) {
-                        return new Date(`${stdMatch[1]}-${stdMatch[2].padStart(2, '0')}-${stdMatch[3].padStart(2, '0')}`);
-                    }
-
-                    // 2. 尝试匹配省略年份的“月日”，补全合同年份
-                    const shortMatch = parsedData.deliveryRaw.match(/(\d{1,2})[月\.\/](\d{1,2})[日]?/);
-                    if (shortMatch) {
-                        const year = signDate.getFullYear();
-                        return new Date(`${year}-${shortMatch[1].padStart(2, '0')}-${shortMatch[2].padStart(2, '0')}`);
-                    }
-
-                    return null;
-                })(),
-                contractSignDate: parsedData.contractSignDate ? new Date(parsedData.contractSignDate) : null,
-            }
-        })
-
-        if (parsedData.devices && Array.isArray(parsedData.devices)) {
-            let deviceSeq = 1
-            for (const d of parsedData.devices) {
-                await prisma.device.create({
-                    data: {
-                        projectId: project.id,
-                        deviceNumber: `${contractNumber}-${String(deviceSeq++).padStart(2, '0')}`,
-                        category: d.category || "未命名设备",
-                        quantity: d.quantity || 1,
-                        price: d.price || null,
-                        techSpecs: `${d.techSpecs}\n\n**附件协议/要求:** ${d.delivery}\n**发票描述:** ${parsedData.invoiceStatus}`
-                    }
-                })
-            }
-        }
-
-        return NextResponse.json({ success: true, message: "硅基流动解析成功", data: parsedData, projectId: project.id })
+        return NextResponse.json({ success: true, message: "硅基流动解析成功", data: parsedData, projectId: result.id })
 
     } catch (error: any) {
         console.error("SiliconFlow API Error:", error)

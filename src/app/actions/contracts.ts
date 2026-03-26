@@ -189,12 +189,13 @@ export async function upsertContract(id: string | null, data: any) {
 
 
         } else {
-            const maxSeq = await db.contract.aggregate({ _max: { seq: true } })
-            await db.contract.create({
-                data: {
-                    seq: (maxSeq._max.seq ?? 0) + 1,
-                    // 不再向 Contract 写入任何冗余与剥离出的字段
-                }
+            await prisma.$transaction(async (tx) => {
+                const maxSeq = await (tx as any).contract.aggregate({ _max: { seq: true } })
+                await (tx as any).contract.create({
+                    data: {
+                        seq: (maxSeq._max.seq ?? 0) + 1,
+                    }
+                })
             })
         }
 

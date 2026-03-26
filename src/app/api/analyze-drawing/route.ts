@@ -97,7 +97,7 @@ async function extractDrawingFeaturesVisually(buffer: Buffer, originalMimeType: 
             try {
                 // eslint-disable-next-line @typescript-eslint/no-require-imports
                 require('fs').appendFileSync('/tmp/gemini_error.log', `\n[${new Date().toISOString()}] Model: ${modelName}, Mime: ${mimeType}\nError: ${e?.message}\nStack: ${e?.stack}\n`)
-            } catch (err) { }
+            } catch (logErr) { console.warn("[Vision] Failed to write error log:", logErr) }
 
             if (e.message?.includes("429") || e.message?.includes("503")) {
                 await sleep(2000)

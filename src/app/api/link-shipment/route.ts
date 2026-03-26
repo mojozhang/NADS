@@ -29,22 +29,25 @@ export async function POST(req: NextRequest) {
         const newFilePath = path.join(uploadDir, newFileName)
         const finalPublicUrl = `/uploads/shipments/${newFileName}`
 
-        await rename(tempPath, newFilePath)
+        // 3. 更新数据库与文件移动原子化
+        const shipDate = parsed.shipDate ? new Date(parsed.shipDate) : new Date()
+        await prisma.$transaction(async (tx) => {
+            await (tx as any).project.update({
+                where: { id: projectId },
+                data: {
+                    shipmentDocName: parsed.fileName || "手动关联发货单",
+                    shipmentDocUrl: finalPublicUrl,
+                    delivery: shipDate
+                }
+            })
 
-        // 3. 更新数据库
-        await (prisma.project as any).update({
-            where: { id: projectId },
-            data: {
-                shipmentDocName: parsed.fileName || "手动关联发货单",
-                shipmentDocUrl: finalPublicUrl,
-                delivery: parsed.shipDate ? new Date(parsed.shipDate) : new Date()
-            }
-        })
+            await tx.device.updateMany({
+                where: { projectId: projectId },
+                data: { shipmentAck: shipDate }
+            })
 
-        // 更新项目下的所有设备发货状态
-        await prisma.device.updateMany({
-            where: { projectId: projectId },
-            data: { shipmentAck: parsed.shipDate ? new Date(parsed.shipDate) : new Date() }
+            // 在事务中执行文件移动，如果失败则触发数据库回滚
+            await rename(tempPath, newFilePath)
         })
 
         return NextResponse.json({

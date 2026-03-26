@@ -3,13 +3,11 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import prisma from "@/lib/prisma/client"
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, BorderStyle, WidthType, AlignmentType, VerticalAlign } from "docx"
-import { appendFileSync } from "fs"
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-    const logPath = "/tmp/nads_debug.log";
-    const log = (msg: string) => appendFileSync(logPath, `[${new Date().toISOString()}] ${msg}\n`);
+    const log = (msg: string) => console.log(`[${new Date().toISOString()}] ${msg}`);
 
     try {
         log(`DEBUG: Starting shipment-doc generation for project ID: ${params.id}`);

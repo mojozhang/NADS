@@ -493,15 +493,7 @@ export async function updateProjectDelivery(
             }
         })
 
-        // 同步交付日期到合同收款表
-        if (finalDelivery) {
-            try {
-                await (prisma as any).contract.updateMany({
-                    where: { projectId },
-                    data: { deliveryDate: finalDelivery }
-                })
-            } catch (_) { /* 合同记录可能不存在，忽略 */ }
-        }
+
 
         return { success: true }
     } catch (error: any) {
@@ -568,13 +560,7 @@ export async function toggleMilestone(deviceId: string, field: 'designAck' | 'st
                 where: { id: project.id },
                 data: { delivery: newValue }
             })
-            // 同步交付日期到合同收款表
-            try {
-                await (prisma as any).contract.updateMany({
-                    where: { projectId: project.id },
-                    data: { deliveryDate: newValue }
-                })
-            } catch (_) { /* 忽略合同表不存在的情况 */ }
+
         }
 
         return { success: true }

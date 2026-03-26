@@ -110,12 +110,14 @@ export async function addPaymentRecord(projectId: string, amount: number, paymen
 
         if (!contract) {
             console.log("Creating new contract record...");
-            const maxSeq = await db.contract.aggregate({ _max: { seq: true } })
-            contract = await db.contract.create({
-                data: {
-                    projectId,
-                    seq: (maxSeq._max.seq ?? 0) + 1
-                }
+            contract = await prisma.$transaction(async (tx) => {
+                const maxSeq = await (tx as any).contract.aggregate({ _max: { seq: true } })
+                return (tx as any).contract.create({
+                    data: {
+                        projectId,
+                        seq: (maxSeq._max.seq ?? 0) + 1
+                    }
+                })
             })
         }
 

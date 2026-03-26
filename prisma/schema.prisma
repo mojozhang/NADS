@@ -96,7 +96,7 @@ model Project {
   devices               Device[]
   invoices              Invoice[]
   issues                Issue[]
-  client                Client    @relation(fields: [clientId], references: [id])
+  client                Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
 }
 
 model Device {
@@ -202,7 +202,7 @@ model Contract {
   remark4        String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
-  project        Project?  @relation(fields: [projectId], references: [id])
+  project        Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   invoices       Invoice[]
 }
 
@@ -217,8 +217,8 @@ model Invoice {
   status        String    @default("pending")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-  contract      Contract? @relation(fields: [contractId], references: [id])
-  project       Project?  @relation(fields: [projectId], references: [id])
+  contract      Contract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  project       Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }
 
 model Todo {
@@ -229,4 +229,3 @@ model Todo {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
-
